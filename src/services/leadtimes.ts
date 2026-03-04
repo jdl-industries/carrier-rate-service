@@ -1,30 +1,60 @@
-import type { ShopifyCartItem, LeadTimes } from '../types';
-import { DEFAULT_LEAD_TIMES } from '../config/constants';
+import type { ShopifyCartItem } from '../types';
 
-export function getMaxLeadTimeDays(
-  items: ShopifyCartItem[],
-  leadTimes: LeadTimes = DEFAULT_LEAD_TIMES
+export const DEFAULT_HANDLING_DAYS = 1;
+
+export function parseInStockProperty(value: string | undefined): boolean {
+  if (!value) return true; // Default to in stock if not specified
+  const lower = value.toLowerCase().trim();
+  return lower === 'true' || lower === '1' || lower === 'yes';
+}
+
+export function parseLeadTimeProperty(value: string | undefined): number {
+  if (!value) return 0;
+  const trimmed = value.trim();
+  const parsed = parseInt(trimmed, 10);
+  return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+}
+
+export function getItemHandlingDays(
+  item: ShopifyCartItem,
+  defaultHandlingDays: number = DEFAULT_HANDLING_DAYS
 ): number {
-  const defaultLeadTime = leadTimes.default ?? 1;
+  const props = item.properties || {};
+  const inStock = parseInStockProperty(props['_in_stock']);
+  const leadTime = parseLeadTimeProperty(props['_lead_time']);
 
-  if (items.length === 0) {
-    return defaultLeadTime;
+  if (inStock) {
+    return defaultHandlingDays;
   }
 
-  let maxLeadTime = 0;
+  // Out of stock: default handling + lead time
+  return defaultHandlingDays + leadTime;
+}
+
+export function getMaxHandlingDays(
+  items: ShopifyCartItem[],
+  defaultHandlingDays: number = DEFAULT_HANDLING_DAYS
+): number {
+  if (items.length === 0) {
+    return defaultHandlingDays;
+  }
+
+  let maxHandlingDays = 0;
 
   for (const item of items) {
-    const itemLeadTime = leadTimes[item.sku] ?? defaultLeadTime;
-    if (itemLeadTime > maxLeadTime) {
-      maxLeadTime = itemLeadTime;
+    // Handle quantity - each unit has the same handling time, but we take max across items
+    const itemHandlingDays = getItemHandlingDays(item, defaultHandlingDays);
+    if (itemHandlingDays > maxHandlingDays) {
+      maxHandlingDays = itemHandlingDays;
     }
   }
 
-  return maxLeadTime || defaultLeadTime;
+  return maxHandlingDays || defaultHandlingDays;
 }
 
-export function getPriorityLeadTimeDays(standardLeadTime: number): number {
-  return Math.max(1, standardLeadTime - 2);
+export function getPriorityHandlingDays(standardHandlingDays: number): number {
+  // Priority handling reduces time by 2 days, minimum 1 day
+  return Math.max(1, standardHandlingDays - 2);
 }
 
 export function isWeekend(date: Date): boolean {
@@ -57,12 +87,12 @@ export function getNextBusinessDay(date: Date): Date {
   return result;
 }
 
-export function calculateShipDate(leadTimeDays: number, fromDate: Date = new Date()): Date {
-  if (leadTimeDays <= 0) {
+export function calculateShipDate(handlingDays: number, fromDate: Date = new Date()): Date {
+  if (handlingDays <= 0) {
     return getNextBusinessDay(fromDate);
   }
 
-  return addBusinessDays(fromDate, leadTimeDays);
+  return addBusinessDays(fromDate, handlingDays);
 }
 
 export function calculateDeliveryDate(
@@ -90,16 +120,16 @@ export interface DeliveryDateResult {
 export function calculateDeliveryDates(
   items: ShopifyCartItem[],
   transitDays: number,
-  leadTimes: LeadTimes = DEFAULT_LEAD_TIMES,
+  defaultHandlingDays: number = DEFAULT_HANDLING_DAYS,
   isPriority: boolean = false,
   fromDate: Date = new Date()
 ): DeliveryDateResult {
-  const standardLeadTime = getMaxLeadTimeDays(items, leadTimes);
-  const leadTimeDays = isPriority
-    ? getPriorityLeadTimeDays(standardLeadTime)
-    : standardLeadTime;
+  const standardHandlingDays = getMaxHandlingDays(items, defaultHandlingDays);
+  const handlingDays = isPriority
+    ? getPriorityHandlingDays(standardHandlingDays)
+    : standardHandlingDays;
 
-  const shipDate = calculateShipDate(leadTimeDays, fromDate);
+  const shipDate = calculateShipDate(handlingDays, fromDate);
   const deliveryDate = calculateDeliveryDate(shipDate, transitDays);
 
   const deliveryDateISO = formatDateISO(deliveryDate);

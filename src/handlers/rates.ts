@@ -7,19 +7,18 @@ import type {
   BoxConfig,
   ShipperAddress,
   HandlingFees,
-  LeadTimes,
   FedExAddress,
   ParsedFedExRate,
+  FedExPackageLineItem,
 } from '../types';
 import {
   KV_KEYS,
   DEFAULT_BOX_CONFIGS,
   DEFAULT_SHIPPER_ADDRESS,
   DEFAULT_HANDLING_FEES,
-  DEFAULT_LEAD_TIMES,
   DEFAULT_PRIORITY_FEE_CENTS,
 } from '../config/constants';
-import { determineRoute, hasShippableItems, type RouteDecision } from '../services/routing';
+import { determineRoute, hasShippableItems } from '../services/routing';
 import { getPackagesForCart } from '../services/packaging';
 import {
   getFedExAccessToken,
@@ -28,14 +27,18 @@ import {
   parseFedExRateResponse,
   isGroundService,
 } from '../services/fedex';
-import { calculateDeliveryDates, addBusinessDays, formatDateISO } from '../services/leadtimes';
+import {
+  calculateDeliveryDates,
+  addBusinessDays,
+  formatDateISO,
+  DEFAULT_HANDLING_DAYS,
+} from '../services/leadtimes';
 
 interface KVConfig {
   localDeliveryZips: Set<string>;
   shipperAddress: ShipperAddress;
   boxConfigs: BoxConfig[];
   handlingFees: HandlingFees;
-  leadTimes: LeadTimes;
   priorityFeeCents: number;
 }
 
@@ -45,14 +48,12 @@ async function loadKVConfig(kv: KVNamespace): Promise<KVConfig> {
     shipperAddressJson,
     boxSizesJson,
     handlingFeesJson,
-    leadTimesJson,
     priorityFeeJson,
   ] = await Promise.all([
     kv.get(KV_KEYS.LOCAL_DELIVERY_ZIPS),
     kv.get(KV_KEYS.SHIPPER_ADDRESS),
     kv.get(KV_KEYS.BOX_SIZES),
     kv.get(KV_KEYS.HANDLING_FEES),
-    kv.get(KV_KEYS.LEAD_TIMES),
     kv.get(KV_KEYS.PRIORITY_FEE),
   ]);
 
@@ -93,14 +94,6 @@ async function loadKVConfig(kv: KVNamespace): Promise<KVConfig> {
     handlingFees = DEFAULT_HANDLING_FEES;
   }
 
-  let leadTimes: LeadTimes;
-  try {
-    leadTimes = leadTimesJson ? JSON.parse(leadTimesJson) : DEFAULT_LEAD_TIMES;
-  } catch {
-    console.warn('Failed to parse lead times, using defaults');
-    leadTimes = DEFAULT_LEAD_TIMES;
-  }
-
   let priorityFeeCents: number;
   try {
     priorityFeeCents = priorityFeeJson
@@ -116,9 +109,18 @@ async function loadKVConfig(kv: KVNamespace): Promise<KVConfig> {
     shipperAddress,
     boxConfigs,
     handlingFees,
-    leadTimes,
     priorityFeeCents,
   };
+}
+
+function getDefaultHandlingDays(env: Env): number {
+  if (env.DEFAULT_HANDLING_DAYS) {
+    const parsed = parseInt(env.DEFAULT_HANDLING_DAYS, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_HANDLING_DAYS;
 }
 
 function buildLocalDeliveryRate(): ShopifyRate {
@@ -166,7 +168,7 @@ function fedExRatesToShopifyRates(
   fedExRates: ParsedFedExRate[],
   request: ShopifyRateRequest,
   config: KVConfig,
-  isInternational: boolean
+  defaultHandlingDays: number
 ): ShopifyRate[] {
   const rates: ShopifyRate[] = [];
   const items = request.rate.items;
@@ -182,7 +184,7 @@ function fedExRatesToShopifyRates(
     const standardDates = calculateDeliveryDates(
       items,
       fedExRate.transitDays,
-      config.leadTimes,
+      defaultHandlingDays,
       false
     );
 
@@ -198,7 +200,7 @@ function fedExRatesToShopifyRates(
     const priorityDates = calculateDeliveryDates(
       items,
       fedExRate.transitDays,
-      config.leadTimes,
+      defaultHandlingDays,
       true
     );
 
@@ -221,28 +223,112 @@ function fedExRatesToShopifyRates(
 const TEST_SKU = 'TEST-SHIPPING';
 const TEST_PROPERTY_KEY = '_test_mode';
 
-function hasTestTrigger(items: ShopifyRateRequest['rate']['items']): boolean {
-  for (const item of items) {
-    if (item.sku?.toUpperCase() === TEST_SKU) {
-      return true;
-    }
-    if (item.properties?.[TEST_PROPERTY_KEY] === 'true') {
-      return true;
+type TestMode = 'static' | 'dynamic' | false;
+
+function getTestMode(queryParam: string | undefined, items?: ShopifyRateRequest['rate']['items']): TestMode {
+  // Check query param first
+  if (queryParam === 'true' || queryParam === 'static') {
+    return 'static';
+  }
+  if (queryParam === 'dynamic') {
+    return 'dynamic';
+  }
+
+  // Check cart items for test triggers
+  if (items) {
+    for (const item of items) {
+      if (item.sku?.toUpperCase() === TEST_SKU) {
+        return 'static';
+      }
+      const testProp = item.properties?.[TEST_PROPERTY_KEY];
+      if (testProp === 'true' || testProp === 'static') {
+        return 'static';
+      }
+      if (testProp === 'dynamic') {
+        return 'dynamic';
+      }
     }
   }
+
   return false;
+}
+
+function generateMockFedExRates(
+  packages: FedExPackageLineItem[],
+  isInternational: boolean
+): ParsedFedExRate[] {
+  // Calculate base cost from package weights
+  const totalWeightLbs = packages.reduce((sum, pkg) => {
+    return sum + (pkg.weight?.value || 10);
+  }, 0);
+
+  const rates: ParsedFedExRate[] = [];
+
+  if (isInternational) {
+    rates.push({
+      serviceType: 'INTERNATIONAL_ECONOMY',
+      serviceName: 'FedEx International Economy (MOCK)',
+      totalChargeCents: Math.round(4500 + totalWeightLbs * 350),
+      transitDays: 5,
+      deliveryDate: null,
+    });
+    rates.push({
+      serviceType: 'INTERNATIONAL_PRIORITY',
+      serviceName: 'FedEx International Priority (MOCK)',
+      totalChargeCents: Math.round(7500 + totalWeightLbs * 500),
+      transitDays: 3,
+      deliveryDate: null,
+    });
+  } else {
+    // Domestic services
+    rates.push({
+      serviceType: 'FEDEX_GROUND',
+      serviceName: 'FedEx Ground (MOCK)',
+      totalChargeCents: Math.round(1200 + totalWeightLbs * 45),
+      transitDays: 5,
+      deliveryDate: null,
+    });
+    rates.push({
+      serviceType: 'FEDEX_EXPRESS_SAVER',
+      serviceName: 'FedEx Express Saver (MOCK)',
+      totalChargeCents: Math.round(2800 + totalWeightLbs * 85),
+      transitDays: 3,
+      deliveryDate: null,
+    });
+    rates.push({
+      serviceType: 'FEDEX_2_DAY',
+      serviceName: 'FedEx 2Day (MOCK)',
+      totalChargeCents: Math.round(4200 + totalWeightLbs * 120),
+      transitDays: 2,
+      deliveryDate: null,
+    });
+    rates.push({
+      serviceType: 'PRIORITY_OVERNIGHT',
+      serviceName: 'FedEx Priority Overnight (MOCK)',
+      totalChargeCents: Math.round(6500 + totalWeightLbs * 180),
+      transitDays: 1,
+      deliveryDate: null,
+    });
+  }
+
+  return rates;
 }
 
 export function handleTestRateRequest(
   c: Context<{ Bindings: Env }>
 ): Response {
-  const testMode = c.req.query('test') === 'true';
+  const testParam = c.req.query('test');
+  const testMode = getTestMode(testParam);
 
   if (!testMode) {
-    return c.json({ error: 'GET only allowed with ?test=true' }, 405);
+    return c.json({ error: 'GET only allowed with ?test=true or ?test=static or ?test=dynamic (POST required for dynamic)' }, 405);
   }
 
-  console.log('Test mode (GET) - returning dummy rates');
+  if (testMode === 'dynamic') {
+    return c.json({ error: 'Dynamic test mode requires POST with Shopify payload' }, 400);
+  }
+
+  console.log('Test mode (GET/static) - returning dummy rates');
   return c.json({ rates: buildTestRates() }, 200);
 }
 
@@ -286,10 +372,11 @@ function buildTestRates(): ShopifyRate[] {
 export async function handleRateRequest(
   c: Context<{ Bindings: Env }>
 ): Promise<Response> {
-  const testMode = c.req.query('test') === 'true';
+  const testParam = c.req.query('test');
 
-  if (testMode) {
-    console.log('Test mode enabled - returning dummy rates');
+  // Check for static test mode via query param (no payload needed)
+  if (testParam === 'true' || testParam === 'static') {
+    console.log('Test mode (static) - returning dummy rates');
     return c.json({ rates: buildTestRates() }, 200);
   }
 
@@ -303,11 +390,18 @@ export async function handleRateRequest(
   }
 
   const items = request.rate.items;
+  const testMode = getTestMode(testParam, items);
 
-  if (hasTestTrigger(items)) {
-    console.log('Test mode triggered by cart item (SKU or property)');
+  if (testMode === 'static') {
+    console.log('Test mode (static) triggered by cart item');
     console.log('Full Shopify payload:', JSON.stringify(request, null, 2));
     return c.json({ rates: buildTestRates() }, 200);
+  }
+
+  const isDynamicTest = testMode === 'dynamic';
+  if (isDynamicTest) {
+    console.log('Test mode (dynamic) - running full logic with mock FedEx rates');
+    console.log('Full Shopify payload:', JSON.stringify(request, null, 2));
   }
 
   if (!hasShippableItems(items)) {
@@ -349,28 +443,40 @@ export async function handleRateRequest(
       return c.json({ rates: [] }, 200);
     }
 
-    const accessToken = await getFedExAccessToken(c.env);
+    let parsedRates: ParsedFedExRate[];
 
-    const recipientAddress = buildRecipientAddress(request);
-
-    const rateRequest = buildFedExRateRequest(
-      config.shipperAddress,
-      recipientAddress,
-      packages,
-      c.env.FEDEX_ACCOUNT_NUMBER
-    );
-
-    const fedExResponse = await callFedExRateAPI(rateRequest, accessToken);
-
-    if (fedExResponse.errors && fedExResponse.errors.length > 0) {
-      console.error('FedEx API returned errors', {
-        errors: fedExResponse.errors,
-        destinationZip: request.rate.destination.postal_code,
+    if (isDynamicTest) {
+      // Dynamic test mode: use mock FedEx rates
+      console.log('Using mock FedEx rates', {
+        packageCount: packages.length,
+        isInternational: route.isInternational,
       });
-      return c.json({ error: 'FedEx API error' }, 500);
-    }
+      parsedRates = generateMockFedExRates(packages, route.isInternational);
+    } else {
+      // Production mode: call real FedEx API
+      const accessToken = await getFedExAccessToken(c.env);
 
-    const parsedRates = parseFedExRateResponse(fedExResponse, route.isInternational);
+      const recipientAddress = buildRecipientAddress(request);
+
+      const rateRequest = buildFedExRateRequest(
+        config.shipperAddress,
+        recipientAddress,
+        packages,
+        c.env.FEDEX_ACCOUNT_NUMBER
+      );
+
+      const fedExResponse = await callFedExRateAPI(rateRequest, accessToken);
+
+      if (fedExResponse.errors && fedExResponse.errors.length > 0) {
+        console.error('FedEx API returned errors', {
+          errors: fedExResponse.errors,
+          destinationZip: request.rate.destination.postal_code,
+        });
+        return c.json({ error: 'FedEx API error' }, 500);
+      }
+
+      parsedRates = parseFedExRateResponse(fedExResponse, route.isInternational);
+    }
 
     if (parsedRates.length === 0) {
       console.warn('No valid FedEx rates returned', {
@@ -380,11 +486,12 @@ export async function handleRateRequest(
       return c.json({ rates: [] }, 200);
     }
 
+    const defaultHandlingDays = getDefaultHandlingDays(c.env);
     const shopifyRates = fedExRatesToShopifyRates(
       parsedRates,
       request,
       config,
-      route.isInternational
+      defaultHandlingDays
     );
 
     return c.json({ rates: shopifyRates } as ShopifyRateResponse, 200);
