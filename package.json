@@ -9,7 +9,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "seed-kv": "npx tsx scripts/seed-kv.ts",
-    "seed-kv:prod": "npx tsx scripts/seed-kv.ts --env production"
+    "seed-kv:prod": "npx tsx scripts/seed-kv.ts --env production",
+    "create-metafields": "npx tsx scripts/create-metafield-definitions.ts"
   },
   "dependencies": {
     "hono": "^4.4.0"

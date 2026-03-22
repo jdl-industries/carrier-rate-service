@@ -465,7 +465,9 @@ export async function handleRateRequest(
         c.env.FEDEX_ACCOUNT_NUMBER
       );
 
-      const fedExResponse = await callFedExRateAPI(rateRequest, accessToken);
+
+      const useSandbox = c.env.FEDEX_SANDBOX === 'true';
+      const fedExResponse = await callFedExRateAPI(rateRequest, accessToken, useSandbox);
 
       if (fedExResponse.errors && fedExResponse.errors.length > 0) {
         console.error('FedEx API returned errors', {

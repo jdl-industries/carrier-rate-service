@@ -5,7 +5,24 @@ import type {
   ShipperAddress,
 } from "../types";
 
-export const FEDEX_API_BASE = "https://apis.fedex.com";
+// FedEx API endpoints - use FEDEX_SANDBOX=true for test environment
+export const FEDEX_API_BASE_PRODUCTION = "https://apis.fedex.com";
+export const FEDEX_API_BASE_SANDBOX = "https://apis-sandbox.fedex.com";
+
+export function getFedExApiBase(useSandbox: boolean): string {
+  return useSandbox ? FEDEX_API_BASE_SANDBOX : FEDEX_API_BASE_PRODUCTION;
+}
+
+export function getFedExOAuthEndpoint(useSandbox: boolean): string {
+  return `${getFedExApiBase(useSandbox)}/oauth/token`;
+}
+
+export function getFedExRateEndpoint(useSandbox: boolean): string {
+  return `${getFedExApiBase(useSandbox)}/rate/v1/rates/quotes`;
+}
+
+// Legacy constants for backwards compatibility (default to production)
+export const FEDEX_API_BASE = FEDEX_API_BASE_PRODUCTION;
 export const FEDEX_OAUTH_ENDPOINT = `${FEDEX_API_BASE}/oauth/token`;
 export const FEDEX_RATE_ENDPOINT = `${FEDEX_API_BASE}/rate/v1/rates/quotes`;
 
@@ -65,27 +82,19 @@ export const DEFAULT_SHIPPER_ADDRESS: ShipperAddress = {
 export const DEFAULT_BOX_CONFIGS: BoxConfig[] = [
   {
     name: "2-gallon",
-    length: 18,
-    width: 12,
-    height: 10,
+    length: 9,
+    width: 15,
+    height: 9,
     maxWeightLbs: 30,
     emptyWeightLbs: 2,
   },
   {
     name: "4-gallon",
-    length: 18,
-    width: 18,
-    height: 10,
+    length: 15,
+    width: 15,
+    height: 9,
     maxWeightLbs: 55,
     emptyWeightLbs: 3,
-  },
-  {
-    name: "6-gallon",
-    length: 24,
-    width: 18,
-    height: 10,
-    maxWeightLbs: 80,
-    emptyWeightLbs: 4,
   },
 ];
 

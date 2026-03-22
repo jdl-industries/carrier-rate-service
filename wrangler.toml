@@ -18,3 +18,5 @@ invocation_logs = true
 # - FEDEX_CLIENT_ID
 # - FEDEX_CLIENT_SECRET
 # - FEDEX_ACCOUNT_NUMBER
+# - SHOPIFY_ADMIN_TOKEN (Admin API access token for B2B extension)
+# - SHOPIFY_STORE_DOMAIN (e.g., your-store.myshopify.com)

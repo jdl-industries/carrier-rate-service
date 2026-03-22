@@ -65,6 +65,16 @@ export interface FedExRateRequest {
     recipient: {
       address: FedExAddress;
     };
+    shippingChargesPayment?: {
+      paymentType: 'SENDER' | 'RECIPIENT' | 'THIRD_PARTY';
+      payor?: {
+        responsibleParty: {
+          accountNumber: {
+            value: string;
+          };
+        };
+      };
+    };
     preferredCurrency: string;
     shipDateStamp: string;
     pickupType: 'DROPOFF_AT_FEDEX_LOCATION' | 'CONTACT_FEDEX_TO_SCHEDULE' | 'USE_SCHEDULED_PICKUP';
@@ -75,12 +85,16 @@ export interface FedExRateRequest {
 }
 
 export interface FedExRatedShipmentDetail {
-  rateType: 'PAYOR_ACCOUNT_PACKAGE' | 'PAYOR_LIST_PACKAGE' | 'PAYOR_ACCOUNT_SHIPMENT' | 'PAYOR_LIST_SHIPMENT';
+  // FedEx returns different rate type formats depending on API version/environment
+  // Sandbox uses: 'ACCOUNT', 'LIST'
+  // Production may use: 'PAYOR_ACCOUNT_PACKAGE', 'PAYOR_LIST_PACKAGE', etc.
+  rateType: 'ACCOUNT' | 'LIST' | 'PAYOR_ACCOUNT_PACKAGE' | 'PAYOR_LIST_PACKAGE' | 'PAYOR_ACCOUNT_SHIPMENT' | 'PAYOR_LIST_SHIPMENT';
   ratedWeightMethod?: string;
-  totalDiscounts?: FedExMoney[];
-  totalBaseCharge?: FedExMoney[];
-  totalNetCharge?: FedExMoney[];
-  totalNetFedExCharge?: FedExMoney[];
+  totalDiscounts?: number | FedExMoney[];
+  totalBaseCharge?: number | FedExMoney[];
+  // Can be a number (sandbox) or array of FedExMoney (production)
+  totalNetCharge?: number | FedExMoney[];
+  totalNetFedExCharge?: number | FedExMoney[];
   shipmentRateDetail?: {
     totalBillingWeight?: FedExWeight;
     totalDimWeight?: FedExWeight;

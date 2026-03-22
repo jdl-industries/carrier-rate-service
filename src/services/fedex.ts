@@ -9,8 +9,8 @@ import type {
   ShipperAddress,
 } from '../types';
 import {
-  FEDEX_OAUTH_ENDPOINT,
-  FEDEX_RATE_ENDPOINT,
+  getFedExOAuthEndpoint,
+  getFedExRateEndpoint,
   FEDEX_TOKEN_EXPIRY_BUFFER_SECONDS,
   FEDEX_API_TIMEOUT_MS,
   ALL_ALLOWED_SERVICES,
@@ -27,12 +27,15 @@ let tokenCache: CachedToken | null = null;
 
 export async function getFedExAccessToken(env: Env): Promise<string> {
   const now = Date.now();
+  const useSandbox = env.FEDEX_SANDBOX === 'true';
 
   if (tokenCache && tokenCache.expiresAt > now) {
     return tokenCache.accessToken;
   }
 
-  const response = await fetch(FEDEX_OAUTH_ENDPOINT, {
+  const oauthEndpoint = getFedExOAuthEndpoint(useSandbox);
+
+  const response = await fetch(oauthEndpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -68,22 +71,23 @@ export function buildFedExRateRequest(
   const today = new Date();
   const shipDateStamp = today.toISOString().split('T')[0];
 
-  const packagesWithDG: FedExPackageLineItem[] = packages.map((pkg) => ({
-    ...pkg,
-    specialServicesRequested: {
-      specialServiceTypes: ['DANGEROUS_GOODS'],
-      dangerousGoodsDetail: {
-        accessibility: 'ACCESSIBLE',
-        regulationType: 'DOT_IATA',
-        cargo: true,
-        signatory: {
-          contactName: 'JDL Shipping',
-          title: 'Shipping Manager',
-          place: 'Miami, FL',
-        },
-      },
-    },
-  }));
+  // TODO: Re-enable dangerous goods handling when needed
+  // const packagesWithDG: FedExPackageLineItem[] = packages.map((pkg) => ({
+  //   ...pkg,
+  //   specialServicesRequested: {
+  //     specialServiceTypes: ['DANGEROUS_GOODS'],
+  //     dangerousGoodsDetail: {
+  //       accessibility: 'ACCESSIBLE',
+  //       regulationType: 'DOT_IATA',
+  //       cargo: true,
+  //       signatory: {
+  //         contactName: 'JDL Shipping',
+  //         title: 'Shipping Manager',
+  //         place: 'Miami, FL',
+  //       },
+  //     },
+  //   },
+  // }));
 
   return {
     accountNumber: {
@@ -106,25 +110,37 @@ export function buildFedExRateRequest(
       recipient: {
         address: recipientAddress,
       },
+      shippingChargesPayment: {
+        paymentType: 'SENDER',
+        payor: {
+          responsibleParty: {
+            accountNumber: {
+              value: accountNumber,
+            },
+          },
+        },
+      },
       preferredCurrency: 'USD',
       shipDateStamp,
       pickupType: 'DROPOFF_AT_FEDEX_LOCATION',
       packagingType: 'YOUR_PACKAGING',
       rateRequestType: ['LIST', 'ACCOUNT'],
-      requestedPackageLineItems: packagesWithDG,
+      requestedPackageLineItems: packages,
     },
   };
 }
 
 export async function callFedExRateAPI(
   rateRequest: FedExRateRequest,
-  accessToken: string
+  accessToken: string,
+  useSandbox: boolean = false
 ): Promise<FedExRateResponse> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FEDEX_API_TIMEOUT_MS);
+  const rateEndpoint = getFedExRateEndpoint(useSandbox);
 
   try {
-    const response = await fetch(FEDEX_RATE_ENDPOINT, {
+    const response = await fetch(rateEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -169,20 +185,35 @@ export function parseFedExRateResponse(
     }
 
     const ratedDetails = detail.ratedShipmentDetails || [];
+    // FedEx returns different rate type formats depending on API version/environment
+    // Sandbox uses: 'ACCOUNT', 'LIST'
+    // Production may use: 'PAYOR_ACCOUNT_PACKAGE', 'PAYOR_LIST_PACKAGE', etc.
     const accountRate = ratedDetails.find(
-      (r) => r.rateType === 'PAYOR_ACCOUNT_PACKAGE' || r.rateType === 'PAYOR_ACCOUNT_SHIPMENT'
+      (r) => r.rateType === 'ACCOUNT' || r.rateType === 'PAYOR_ACCOUNT_PACKAGE' || r.rateType === 'PAYOR_ACCOUNT_SHIPMENT'
     );
     const listRate = ratedDetails.find(
-      (r) => r.rateType === 'PAYOR_LIST_PACKAGE' || r.rateType === 'PAYOR_LIST_SHIPMENT'
+      (r) => r.rateType === 'LIST' || r.rateType === 'PAYOR_LIST_PACKAGE' || r.rateType === 'PAYOR_LIST_SHIPMENT'
     );
 
     const selectedRate = accountRate || listRate;
     if (!selectedRate) continue;
 
-    const totalCharge = selectedRate.totalNetCharge?.[0] || selectedRate.totalNetFedExCharge?.[0];
-    if (!totalCharge) continue;
+    // FedEx returns totalNetCharge as either a number or array of {currency, amount}
+    let totalChargeCents: number;
+    const netCharge = selectedRate.totalNetCharge;
+    const fedExCharge = selectedRate.totalNetFedExCharge;
 
-    const totalChargeCents = Math.round(totalCharge.amount * 100);
+    if (typeof netCharge === 'number') {
+      totalChargeCents = Math.round(netCharge * 100);
+    } else if (typeof fedExCharge === 'number') {
+      totalChargeCents = Math.round(fedExCharge * 100);
+    } else if (Array.isArray(netCharge) && netCharge[0]?.amount) {
+      totalChargeCents = Math.round(netCharge[0].amount * 100);
+    } else if (Array.isArray(fedExCharge) && fedExCharge[0]?.amount) {
+      totalChargeCents = Math.round(fedExCharge[0].amount * 100);
+    } else {
+      continue;
+    }
 
     let transitDays = 1;
     let deliveryDate: string | null = null;

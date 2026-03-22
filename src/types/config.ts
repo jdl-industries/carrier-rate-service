@@ -30,5 +30,9 @@ export interface Env {
   FEDEX_CLIENT_ID: string;
   FEDEX_CLIENT_SECRET: string;
   FEDEX_ACCOUNT_NUMBER: string;
+  FEDEX_SANDBOX?: string; // Set to 'true' to use FedEx sandbox/test environment
   DEFAULT_HANDLING_DAYS?: string;
+  // Shopify B2B extension secrets
+  SHOPIFY_ADMIN_TOKEN: string;
+  SHOPIFY_STORE_DOMAIN: string;
 }

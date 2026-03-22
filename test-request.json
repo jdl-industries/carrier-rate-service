@@ -1,0 +1,72 @@
+{
+  "rate": {
+    "origin": {
+      "country": "US",
+      "postal_code": "33172-2831",
+      "province": "FL",
+      "city": "Miami",
+      "name": null,
+      "address1": "9500 Northwest 12th Street",
+      "address2": "Unit 6",
+      "address3": null,
+      "latitude": 25.7829042,
+      "longitude": -80.3497562,
+      "phone": "+13055992022",
+      "fax": null,
+      "email": null,
+      "address_type": null,
+      "company_name": "JDL Industries, Inc"
+    },
+    "destination": {
+      "country": "US",
+      "postal_code": "85937",
+      "province": "AZ",
+      "city": "Snowflake",
+      "name": "test tester",
+      "address1": "123 Main Street",
+      "address2": null,
+      "address3": null,
+      "latitude": 33.4123504,
+      "longitude": -110.8155964,
+      "phone": "4132193527",
+      "fax": null,
+      "email": null,
+      "address_type": null,
+      "company_name": "Foo Company"
+    },
+    "items": [
+      {
+        "name": "Hentzen 17176KEP/16709CEH, Non-Chrome Epoxy Primer Low IR, MIL-PRF-23377 Type II (QPL) - Gallon",
+        "sku": "HZK17176KEP_G-1",
+        "quantity": 2,
+        "grams": 5443,
+        "price": 51719,
+        "vendor": "Hentzen",
+        "requires_shipping": true,
+        "taxable": true,
+        "fulfillment_service": "manual",
+        "properties": {
+          "_is_hazmat": "true",
+          "_lead_time": "90 days",
+          "_length": "7 in ",
+          "_width": "7 in ",
+          "_height": "8 in ",
+          "_in_stock": "true"
+        },
+        "product_id": 8581775392926,
+        "variant_id": 46543324315806
+      }
+    ],
+    "currency": "USD",
+    "locale": "en-US",
+    "order_totals": {
+      "subtotal_price": 103438,
+      "total_price": 103438,
+      "discount_amount": 0
+    },
+    "customer": {
+      "id": 9078575956126,
+      "tags": ["Login with Shop", "Shop"]
+    }
+  }
+}

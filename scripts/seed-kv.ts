@@ -4,10 +4,15 @@ import { execSync } from "child_process";
 
 const isProduction =
   process.argv.includes("--env") && process.argv.includes("production");
-const envFlag = isProduction ? "--preview false" : "--preview";
+
+// KV namespace ID from wrangler.toml
+const KV_NAMESPACE_ID = "b17376c37a5641bebb48927a3409c6f5";
+
+// For local dev, use --local flag; for production, use the remote namespace
+const kvFlag = isProduction ? "" : "--local";
 
 console.log(
-  `Seeding KV namespace${isProduction ? " (production)" : " (preview)"}...\n`,
+  `Seeding KV namespace${isProduction ? " (production)" : " (local)"}...\n`,
 );
 
 const MIAMI_DADE_ZIPS = [
@@ -226,27 +231,19 @@ const SHIPPER_ADDRESS = {
 const BOX_SIZES = [
   {
     name: "2-gallon",
-    length: 18,
-    width: 12,
-    height: 10,
+    length: 9,
+    width: 15,
+    height: 9,
     maxWeightLbs: 30,
     emptyWeightLbs: 2,
   },
   {
     name: "4-gallon",
-    length: 18,
-    width: 18,
-    height: 10,
+    length: 15,
+    width: 15,
+    height: 9,
     maxWeightLbs: 55,
     emptyWeightLbs: 3,
-  },
-  {
-    name: "6-gallon",
-    length: 24,
-    width: 18,
-    height: 10,
-    maxWeightLbs: 80,
-    emptyWeightLbs: 4,
   },
 ];
 
@@ -280,7 +277,7 @@ for (const entry of kvEntries) {
 
   try {
     execSync(
-      `npx wrangler kv:key put --binding=JDL_CONFIG '${entry.key}' '${escapedValue}' ${envFlag}`,
+      `npx wrangler kv key put --namespace-id=${KV_NAMESPACE_ID} '${entry.key}' '${escapedValue}' ${kvFlag}`,
       { stdio: "inherit" },
     );
   } catch (error) {
@@ -293,7 +290,7 @@ console.log("\nKV namespace seeded successfully!");
 console.log(
   `\nLocal delivery zip codes: ${LOCAL_DELIVERY_ZIPS.length} entries`,
 );
-console.log("Box sizes: 3 configurations");
+console.log(`Box sizes: ${BOX_SIZES.length} configurations`);
 console.log(
   `Handling fees: Ground=$${HANDLING_FEES.ground_per_order}, Air=$${HANDLING_FEES.air_per_order}`,
 );
