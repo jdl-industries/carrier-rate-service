@@ -15,7 +15,7 @@ export interface FedExAddress {
 }
 
 export interface FedExWeight {
-  units: 'LB' | 'KG';
+  units: "LB" | "KG";
   value: number;
 }
 
@@ -23,14 +23,14 @@ export interface FedExDimensions {
   length: number;
   width: number;
   height: number;
-  units: 'IN' | 'CM';
+  units: "IN" | "CM";
 }
 
 export interface FedExDangerousGoodsDetail {
-  accessibility: 'ACCESSIBLE' | 'INACCESSIBLE';
-  regulationType: 'DOT' | 'IATA' | 'DOT_IATA';
-  cargo: boolean;
-  signatory: {
+  accessibility: "ACCESSIBLE" | "INACCESSIBLE";
+  regulationType: "DOT" | "IATA" | "DOT_IATA";
+  cargo?: boolean;
+  signatory?: {
     contactName: string;
     title: string;
     place: string;
@@ -46,7 +46,7 @@ export interface FedExPackageLineItem {
   weight: FedExWeight;
   dimensions: FedExDimensions;
   groupPackageCount: number;
-  specialServicesRequested?: FedExSpecialServicesRequested;
+  packageSpecialServices?: FedExSpecialServicesRequested;
 }
 
 export interface FedExRateRequest {
@@ -57,6 +57,7 @@ export interface FedExRateRequest {
     returnTransitTimes: boolean;
     servicesNeededOnRateFailure: boolean;
     rateSortOrder?: string;
+    variableOptions?: string[];
   };
   requestedShipment: {
     shipper: {
@@ -66,7 +67,7 @@ export interface FedExRateRequest {
       address: FedExAddress;
     };
     shippingChargesPayment?: {
-      paymentType: 'SENDER' | 'RECIPIENT' | 'THIRD_PARTY';
+      paymentType: "SENDER" | "RECIPIENT" | "THIRD_PARTY";
       payor?: {
         responsibleParty: {
           accountNumber: {
@@ -77,9 +78,12 @@ export interface FedExRateRequest {
     };
     preferredCurrency: string;
     shipDateStamp: string;
-    pickupType: 'DROPOFF_AT_FEDEX_LOCATION' | 'CONTACT_FEDEX_TO_SCHEDULE' | 'USE_SCHEDULED_PICKUP';
-    packagingType: 'YOUR_PACKAGING' | 'FEDEX_BOX' | 'FEDEX_ENVELOPE';
-    rateRequestType: ('LIST' | 'ACCOUNT')[];
+    pickupType:
+      | "DROPOFF_AT_FEDEX_LOCATION"
+      | "CONTACT_FEDEX_TO_SCHEDULE"
+      | "USE_SCHEDULED_PICKUP";
+    packagingType: "YOUR_PACKAGING" | "FEDEX_BOX" | "FEDEX_ENVELOPE";
+    rateRequestType: ("LIST" | "ACCOUNT")[];
     requestedPackageLineItems: FedExPackageLineItem[];
   };
 }
@@ -88,7 +92,13 @@ export interface FedExRatedShipmentDetail {
   // FedEx returns different rate type formats depending on API version/environment
   // Sandbox uses: 'ACCOUNT', 'LIST'
   // Production may use: 'PAYOR_ACCOUNT_PACKAGE', 'PAYOR_LIST_PACKAGE', etc.
-  rateType: 'ACCOUNT' | 'LIST' | 'PAYOR_ACCOUNT_PACKAGE' | 'PAYOR_LIST_PACKAGE' | 'PAYOR_ACCOUNT_SHIPMENT' | 'PAYOR_LIST_SHIPMENT';
+  rateType:
+    | "ACCOUNT"
+    | "LIST"
+    | "PAYOR_ACCOUNT_PACKAGE"
+    | "PAYOR_LIST_PACKAGE"
+    | "PAYOR_ACCOUNT_SHIPMENT"
+    | "PAYOR_LIST_SHIPMENT";
   ratedWeightMethod?: string;
   totalDiscounts?: number | FedExMoney[];
   totalBaseCharge?: number | FedExMoney[];

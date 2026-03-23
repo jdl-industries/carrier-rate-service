@@ -7,7 +7,7 @@ import type {
   FedExAddress,
   ParsedFedExRate,
   ShipperAddress,
-} from '../types';
+} from "../types";
 import {
   getFedExOAuthEndpoint,
   getFedExRateEndpoint,
@@ -16,7 +16,7 @@ import {
   ALL_ALLOWED_SERVICES,
   GROUND_SERVICE_SET,
   SERVICE_DISPLAY_NAMES,
-} from '../config/constants';
+} from "../config/constants";
 
 interface CachedToken {
   accessToken: string;
@@ -27,7 +27,7 @@ let tokenCache: CachedToken | null = null;
 
 export async function getFedExAccessToken(env: Env): Promise<string> {
   const now = Date.now();
-  const useSandbox = env.FEDEX_SANDBOX === 'true';
+  const useSandbox = env.FEDEX_SANDBOX === "true";
 
   if (tokenCache && tokenCache.expiresAt > now) {
     return tokenCache.accessToken;
@@ -36,12 +36,12 @@ export async function getFedExAccessToken(env: Env): Promise<string> {
   const oauthEndpoint = getFedExOAuthEndpoint(useSandbox);
 
   const response = await fetch(oauthEndpoint, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({
-      grant_type: 'client_credentials',
+      grant_type: "client_credentials",
       client_id: env.FEDEX_CLIENT_ID,
       client_secret: env.FEDEX_CLIENT_SECRET,
     }).toString(),
@@ -56,7 +56,8 @@ export async function getFedExAccessToken(env: Env): Promise<string> {
 
   tokenCache = {
     accessToken: data.access_token,
-    expiresAt: now + (data.expires_in - FEDEX_TOKEN_EXPIRY_BUFFER_SECONDS) * 1000,
+    expiresAt:
+      now + (data.expires_in - FEDEX_TOKEN_EXPIRY_BUFFER_SECONDS) * 1000,
   };
 
   return data.access_token;
@@ -66,28 +67,33 @@ export function buildFedExRateRequest(
   shipperAddress: ShipperAddress,
   recipientAddress: FedExAddress,
   packages: FedExPackageLineItem[],
-  accountNumber: string
+  accountNumber: string,
+  includeHazmat: boolean = false,
 ): FedExRateRequest {
   const today = new Date();
-  const shipDateStamp = today.toISOString().split('T')[0];
+  const shipDateStamp = today.toISOString().split("T")[0];
 
-  // TODO: Re-enable dangerous goods handling when needed
-  // const packagesWithDG: FedExPackageLineItem[] = packages.map((pkg) => ({
-  //   ...pkg,
-  //   specialServicesRequested: {
-  //     specialServiceTypes: ['DANGEROUS_GOODS'],
-  //     dangerousGoodsDetail: {
-  //       accessibility: 'ACCESSIBLE',
-  //       regulationType: 'DOT_IATA',
-  //       cargo: true,
-  //       signatory: {
-  //         contactName: 'JDL Shipping',
-  //         title: 'Shipping Manager',
-  //         place: 'Miami, FL',
-  //       },
-  //     },
-  //   },
-  // }));
+  // Add dangerous goods handling if any items are hazmat
+  // Note: For rate quotes, we just flag the service type - detailed DG info is for shipping labels
+  const requestPackages: FedExPackageLineItem[] = includeHazmat
+    ? packages.map((pkg) => ({
+        ...pkg,
+        packageSpecialServices: {
+          specialServiceTypes: ["DANGEROUS_GOODS"],
+          dangerousGoodsDetail: {
+            accessibility: "INACCESSIBLE",
+            regulationType: "IATA",
+          },
+        },
+      }))
+    : packages;
+
+  if (includeHazmat) {
+    console.log("Including hazmat in rate request", {
+      packageCount: packages.length,
+      dgConfig: requestPackages[0]?.packageSpecialServices,
+    });
+  }
 
   return {
     accountNumber: {
@@ -111,7 +117,7 @@ export function buildFedExRateRequest(
         address: recipientAddress,
       },
       shippingChargesPayment: {
-        paymentType: 'SENDER',
+        paymentType: "SENDER",
         payor: {
           responsibleParty: {
             accountNumber: {
@@ -120,12 +126,12 @@ export function buildFedExRateRequest(
           },
         },
       },
-      preferredCurrency: 'USD',
+      preferredCurrency: "USD",
       shipDateStamp,
-      pickupType: 'DROPOFF_AT_FEDEX_LOCATION',
-      packagingType: 'YOUR_PACKAGING',
-      rateRequestType: ['LIST', 'ACCOUNT'],
-      requestedPackageLineItems: packages,
+      pickupType: "DROPOFF_AT_FEDEX_LOCATION",
+      packagingType: "YOUR_PACKAGING",
+      rateRequestType: ["LIST", "ACCOUNT"],
+      requestedPackageLineItems: requestPackages,
     },
   };
 }
@@ -133,7 +139,7 @@ export function buildFedExRateRequest(
 export async function callFedExRateAPI(
   rateRequest: FedExRateRequest,
   accessToken: string,
-  useSandbox: boolean = false
+  useSandbox: boolean = false,
 ): Promise<FedExRateResponse> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FEDEX_API_TIMEOUT_MS);
@@ -141,9 +147,9 @@ export async function callFedExRateAPI(
 
   try {
     const response = await fetch(rateEndpoint, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(rateRequest),
@@ -154,14 +160,16 @@ export async function callFedExRateAPI(
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`FedEx Rate API failed: ${response.status} - ${errorText}`);
+      throw new Error(
+        `FedEx Rate API failed: ${response.status} - ${errorText}`,
+      );
     }
 
     return (await response.json()) as FedExRateResponse;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('FedEx Rate API request timed out');
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("FedEx Rate API request timed out");
     }
     throw error;
   }
@@ -169,7 +177,7 @@ export async function callFedExRateAPI(
 
 export function parseFedExRateResponse(
   response: FedExRateResponse,
-  isInternational: boolean
+  isInternational: boolean,
 ): ParsedFedExRate[] {
   const rates: ParsedFedExRate[] = [];
 
@@ -189,10 +197,16 @@ export function parseFedExRateResponse(
     // Sandbox uses: 'ACCOUNT', 'LIST'
     // Production may use: 'PAYOR_ACCOUNT_PACKAGE', 'PAYOR_LIST_PACKAGE', etc.
     const accountRate = ratedDetails.find(
-      (r) => r.rateType === 'ACCOUNT' || r.rateType === 'PAYOR_ACCOUNT_PACKAGE' || r.rateType === 'PAYOR_ACCOUNT_SHIPMENT'
+      (r) =>
+        r.rateType === "ACCOUNT" ||
+        r.rateType === "PAYOR_ACCOUNT_PACKAGE" ||
+        r.rateType === "PAYOR_ACCOUNT_SHIPMENT",
     );
     const listRate = ratedDetails.find(
-      (r) => r.rateType === 'LIST' || r.rateType === 'PAYOR_LIST_PACKAGE' || r.rateType === 'PAYOR_LIST_SHIPMENT'
+      (r) =>
+        r.rateType === "LIST" ||
+        r.rateType === "PAYOR_LIST_PACKAGE" ||
+        r.rateType === "PAYOR_LIST_SHIPMENT",
     );
 
     const selectedRate = accountRate || listRate;
@@ -203,9 +217,9 @@ export function parseFedExRateResponse(
     const netCharge = selectedRate.totalNetCharge;
     const fedExCharge = selectedRate.totalNetFedExCharge;
 
-    if (typeof netCharge === 'number') {
+    if (typeof netCharge === "number") {
       totalChargeCents = Math.round(netCharge * 100);
-    } else if (typeof fedExCharge === 'number') {
+    } else if (typeof fedExCharge === "number") {
       totalChargeCents = Math.round(fedExCharge * 100);
     } else if (Array.isArray(netCharge) && netCharge[0]?.amount) {
       totalChargeCents = Math.round(netCharge[0].amount * 100);
@@ -227,12 +241,17 @@ export function parseFedExRateResponse(
     if (detail.commit?.transitTime) {
       transitDays = parseTransitTime(detail.commit.transitTime);
     } else if (detail.commit?.transitDays?.minimumTransitTime) {
-      transitDays = parseTransitTime(detail.commit.transitDays.minimumTransitTime);
+      transitDays = parseTransitTime(
+        detail.commit.transitDays.minimumTransitTime,
+      );
     } else if (detail.operationalDetail?.transitTime) {
       transitDays = parseTransitTime(detail.operationalDetail.transitTime);
     }
 
-    const serviceName = SERVICE_DISPLAY_NAMES[detail.serviceType] || detail.serviceName || detail.serviceType;
+    const serviceName =
+      SERVICE_DISPLAY_NAMES[detail.serviceType] ||
+      detail.serviceName ||
+      detail.serviceType;
 
     rates.push({
       serviceType: detail.serviceType,
