@@ -1,6 +1,6 @@
 # JDL Shipping Rates - Shopify Carrier Service
 
-A Cloudflare Worker that provides custom shipping rates for JDL's Shopify store. Handles hazardous materials (Class 3, UN1263/UN1210) shipping via FedEx with proper dangerous goods declarations.
+A Cloudflare Worker that implements a Shopify carrier rate service to provide customm shipping rates for JDL's Shopify store. Handles hazardous materials, accounts for boxing using using the Fedex (Class 3, UN1263/UN1210) shipping via FedEx with proper dangerous goods declarations.
 
 ## Features
 
