@@ -1,5 +1,5 @@
 {
-  "name": "jdl-shipping-rates",
+  "name": "carrier-rate-service",
   "version": "1.0.0",
   "description": "Shopify carrier service for JDL aviation coatings - hazmat shipping via FedEx",
   "type": "module",

@@ -1,4 +1,4 @@
-name = "jdl-shipping-rates"
+name = "carrier-rate-service"
 main = "src/index.ts"
 compatibility_date = "2024-05-29"
 
@@ -7,7 +7,7 @@ DEFAULT_HANDLING_DAYS = "1"
 
 [[kv_namespaces]]
 binding = "JDL_CONFIG"
-id = "b17376c37a5641bebb48927a3409c6f5"
+id = "89596fafb87948c78a36320a517291a8"
 
 [observability]
 [observability.logs]

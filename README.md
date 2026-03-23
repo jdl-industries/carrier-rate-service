@@ -113,7 +113,7 @@ curl -X POST "https://YOUR-STORE.myshopify.com/admin/api/2024-01/carrier_service
   -d '{
     "carrier_service": {
       "name": "JDL Shipping",
-      "callback_url": "https://jdl-shipping-rates.YOUR-SUBDOMAIN.workers.dev/rates",
+      "callback_url": "https://carrier-rate-service.YOUR-SUBDOMAIN.workers.dev/rates",
       "service_discovery": true,
       "carrier_service_type": "api",
       "format": "json"
