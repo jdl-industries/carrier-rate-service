@@ -12,7 +12,6 @@ import {
   LOCAL_DELIVERY_ZIPS,
   BOX_CONFIGS,
   HANDLING_FEES_CENTS,
-  PRIORITY_FEE_CENTS,
 } from "../config";
 import { determineRoute, hasShippableItems } from "../services/routing";
 import { getPackagesForCart } from "../services/packaging";
@@ -111,11 +110,10 @@ function fedExRatesToShopifyRates(
 
     const totalPriceCents = fedExRate.totalChargeCents + handlingFee;
 
-    const standardDates = calculateDeliveryDates(
+    const deliveryDates = calculateDeliveryDates(
       items,
       fedExRate.transitDays,
       defaultHandlingDays,
-      false,
     );
 
     rates.push({
@@ -123,28 +121,8 @@ function fedExRatesToShopifyRates(
       service_code: fedExRate.serviceType,
       total_price: totalPriceCents.toString(),
       currency: "USD",
-      min_delivery_date: standardDates.minDeliveryDateISO,
-      max_delivery_date: standardDates.maxDeliveryDateISO,
-    });
-
-    const priorityDates = calculateDeliveryDates(
-      items,
-      fedExRate.transitDays,
-      defaultHandlingDays,
-      true,
-    );
-
-    const priorityTotalCents = totalPriceCents + PRIORITY_FEE_CENTS;
-
-    rates.push({
-      service_name: `${fedExRate.serviceName} — Priority Handling`,
-      service_code: `${fedExRate.serviceType}_PRIORITY`,
-      total_price: priorityTotalCents.toString(),
-      description:
-        "Order moved to front of fulfillment queue — ships within 1 business day",
-      currency: "USD",
-      min_delivery_date: priorityDates.minDeliveryDateISO,
-      max_delivery_date: priorityDates.maxDeliveryDateISO,
+      min_delivery_date: deliveryDates.minDeliveryDateISO,
+      max_delivery_date: deliveryDates.maxDeliveryDateISO,
     });
   }
 

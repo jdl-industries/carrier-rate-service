@@ -90,8 +90,6 @@ export const HANDLING_FEES_CENTS: HandlingFees = {
   air_per_order: 12500,
 };
 
-export const PRIORITY_FEE_CENTS = 3000;
-
 // =============================================================================
 // Local Delivery Zip Codes
 // =============================================================================

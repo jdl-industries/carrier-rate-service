@@ -52,11 +52,6 @@ export function getMaxHandlingDays(
   return maxHandlingDays || defaultHandlingDays;
 }
 
-export function getPriorityHandlingDays(standardHandlingDays: number): number {
-  // Priority handling reduces time by 2 days, minimum 1 day
-  return Math.max(1, standardHandlingDays - 2);
-}
-
 export function isWeekend(date: Date): boolean {
   const day = date.getUTCDay();
   return day === 0 || day === 6;
@@ -121,14 +116,9 @@ export function calculateDeliveryDates(
   items: ShopifyCartItem[],
   transitDays: number,
   defaultHandlingDays: number = DEFAULT_HANDLING_DAYS,
-  isPriority: boolean = false,
   fromDate: Date = new Date()
 ): DeliveryDateResult {
-  const standardHandlingDays = getMaxHandlingDays(items, defaultHandlingDays);
-  const handlingDays = isPriority
-    ? getPriorityHandlingDays(standardHandlingDays)
-    : standardHandlingDays;
-
+  const handlingDays = getMaxHandlingDays(items, defaultHandlingDays);
   const shipDate = calculateShipDate(handlingDays, fromDate);
   const deliveryDate = calculateDeliveryDate(shipDate, transitDays);
 

@@ -9,7 +9,6 @@ A Cloudflare Worker that implements a Shopify carrier rate service to provide cu
 - **International Military**: FedEx International services for military customers
 - **Freight Forwarding**: Placeholder rates for non-military international orders
 - **Dangerous Goods Handling**: All shipments flagged with proper Dangerous Goods (DG) parameters
-- **Priority Handling**: Optional expedited fulfillment for all FedEx services
 - **Dynamic Box Packing**: Greedy bin-packing algorithm for optimal packaging
 
 ## Prerequisites
@@ -110,7 +109,6 @@ All configuration is stored in `src/config.ts`:
 | `LOCAL_DELIVERY_ZIPS` | Set of Miami-Dade and Broward County zip codes |
 | `BOX_CONFIGS`         | Box configurations for packing algorithm       |
 | `HANDLING_FEES_CENTS` | Ground and air handling fees                   |
-| `PRIORITY_FEE_CENTS`  | Priority handling surcharge                    |
 
 ## Routing Logic
 
@@ -153,7 +151,6 @@ Health check endpoint. Returns `{ "status": "ok", "timestamp": "..." }`.
 
 - **Ground Services** (FEDEX_GROUND, GROUND_HOME_DELIVERY): $30 per order
 - **Air/Express Services**: $125 per order
-- **Priority Handling**: +$30 for expedited fulfillment (ships within 1 business day)
 
 ## Error Handling
 

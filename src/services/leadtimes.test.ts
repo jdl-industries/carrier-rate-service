@@ -4,7 +4,6 @@ import {
   parseLeadTimeProperty,
   getItemHandlingDays,
   getMaxHandlingDays,
-  getPriorityHandlingDays,
   isWeekend,
   addBusinessDays,
   getNextBusinessDay,
@@ -157,25 +156,6 @@ describe('getMaxHandlingDays', () => {
   });
 });
 
-describe('getPriorityHandlingDays', () => {
-  it('reduces handling days by 2', () => {
-    expect(getPriorityHandlingDays(5)).toBe(3);
-  });
-
-  it('caps minimum at 1 day', () => {
-    expect(getPriorityHandlingDays(1)).toBe(1);
-    expect(getPriorityHandlingDays(2)).toBe(1);
-  });
-
-  it('returns 1 for 3 day handling', () => {
-    expect(getPriorityHandlingDays(3)).toBe(1);
-  });
-
-  it('handles large handling times', () => {
-    expect(getPriorityHandlingDays(14)).toBe(12);
-  });
-});
-
 describe('isWeekend', () => {
   it('returns true for Saturday', () => {
     const saturday = new Date('2024-01-06T00:00:00Z');
@@ -283,7 +263,7 @@ describe('calculateDeliveryDates', () => {
   it('calculates standard delivery dates for in-stock items', () => {
     const items = [createCartItem({ '_in_stock': 'true' })];
     const fromDate = new Date('2024-01-08T00:00:00Z');
-    const result = calculateDeliveryDates(items, 2, 1, false, fromDate);
+    const result = calculateDeliveryDates(items, 2, 1, fromDate);
 
     // 1 handling day + 2 transit days = delivery on Jan 11
     expect(result.shipDate.toISOString().split('T')[0]).toBe('2024-01-09');
@@ -298,26 +278,11 @@ describe('calculateDeliveryDates', () => {
       }),
     ];
     const fromDate = new Date('2024-01-08T00:00:00Z');
-    const result = calculateDeliveryDates(items, 2, 1, false, fromDate);
+    const result = calculateDeliveryDates(items, 2, 1, fromDate);
 
     // 1 handling + 5 lead time = 6 handling days + 2 transit
     expect(result.shipDate.toISOString().split('T')[0]).toBe('2024-01-16');
     expect(result.deliveryDate.toISOString().split('T')[0]).toBe('2024-01-18');
-  });
-
-  it('calculates priority delivery dates with reduced handling time', () => {
-    const items = [
-      createCartItem({
-        '_in_stock': 'false',
-        '_lead_time': '5',
-      }),
-    ];
-    const fromDate = new Date('2024-01-08T00:00:00Z');
-    const result = calculateDeliveryDates(items, 2, 1, true, fromDate);
-
-    // Priority: max(1, 6 - 2) = 4 handling days + 2 transit
-    expect(result.shipDate.toISOString().split('T')[0]).toBe('2024-01-12');
-    expect(result.deliveryDate.toISOString().split('T')[0]).toBe('2024-01-16');
   });
 
   it('uses max handling days across all items', () => {
@@ -326,7 +291,7 @@ describe('calculateDeliveryDates', () => {
       createCartItem({ '_in_stock': 'false', '_lead_time': '7' }), // 8 days
     ];
     const fromDate = new Date('2024-01-08T00:00:00Z');
-    const result = calculateDeliveryDates(items, 1, 1, false, fromDate);
+    const result = calculateDeliveryDates(items, 1, 1, fromDate);
 
     // Max is 8 handling days + 1 transit
     expect(result.shipDate.toISOString().split('T')[0]).toBe('2024-01-18');
@@ -336,7 +301,7 @@ describe('calculateDeliveryDates', () => {
   it('returns ISO formatted dates', () => {
     const items = [createCartItem({ '_in_stock': 'true' })];
     const fromDate = new Date('2024-01-08T00:00:00Z');
-    const result = calculateDeliveryDates(items, 1, 1, false, fromDate);
+    const result = calculateDeliveryDates(items, 1, 1, fromDate);
 
     expect(result.minDeliveryDateISO).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(result.maxDeliveryDateISO).toMatch(/^\d{4}-\d{2}-\d{2}$/);
