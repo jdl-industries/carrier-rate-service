@@ -18,4 +18,5 @@ export interface Env {
   FEDEX_ACCOUNT_NUMBER: string;
   FEDEX_SANDBOX?: string; // Set to 'true' to use FedEx sandbox/test environment
   DEFAULT_HANDLING_DAYS?: string;
+  LOG?: string; // Set to 'full' to enable verbose request/response logging
 }

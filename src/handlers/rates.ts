@@ -292,7 +292,8 @@ export async function handleRateRequest(
   c: Context<{ Bindings: Env }>,
 ): Promise<Response> {
   const useSandbox = c.env.FEDEX_SANDBOX === "true";
-  const logger = createLogger(useSandbox);
+  const verboseLogging = useSandbox || c.env.LOG === "full";
+  const logger = createLogger(verboseLogging);
   const testParam = c.req.query("test");
 
   // Check for static test mode via query param (no payload needed)
