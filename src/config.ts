@@ -1,4 +1,4 @@
-import type { BoxConfig, HandlingFees } from "./types";
+import type { BoxConfig, HazmatFees } from "./types";
 
 // =============================================================================
 // FedEx API Configuration
@@ -85,7 +85,7 @@ export const BOX_CONFIGS: BoxConfig[] = [
   },
 ];
 
-export const HANDLING_FEES_CENTS: HandlingFees = {
+export const HAZMAT_FEES_CENTS: HazmatFees = {
   ground_per_order: 3000,
   air_per_order: 12500,
 };

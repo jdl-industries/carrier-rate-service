@@ -11,12 +11,13 @@ import type {
 import {
   LOCAL_DELIVERY_ZIPS,
   BOX_CONFIGS,
-  HANDLING_FEES_CENTS,
+  HAZMAT_FEES_CENTS,
 } from "../config";
 import { determineRoute, hasShippableItems } from "../services/routing";
 import { getPackagesForCart } from "../services/packaging";
 import {
   getFedExAccessToken,
+  getFedExCredentials,
   buildFedExRateRequest,
   callFedExRateAPI,
   parseFedExRateResponse,
@@ -110,9 +111,11 @@ function fedExRatesToShopifyRates(
 
   for (const fedExRate of fedExRates) {
     const isGround = isGroundService(fedExRate.serviceType);
-    const handlingFee = isGround
-      ? HANDLING_FEES_CENTS.ground_per_order
-      : HANDLING_FEES_CENTS.air_per_order;
+    const handlingFee = includeHazmat
+      ? isGround
+        ? HAZMAT_FEES_CENTS.ground_per_order
+        : HAZMAT_FEES_CENTS.air_per_order
+      : 0;
 
     const totalPriceCents = fedExRate.totalChargeCents + handlingFee;
 
@@ -373,6 +376,7 @@ export async function handleRateRequest(
       parsedRates = generateMockFedExRates(packages, route.isInternational);
     } else {
       // Production mode: call real FedEx API
+      const credentials = getFedExCredentials(c.env);
       const accessToken = await getFedExAccessToken(c.env);
 
       const shipperAddress = shopifyAddressToFedEx(request.rate.origin);
@@ -382,7 +386,7 @@ export async function handleRateRequest(
         shipperAddress,
         recipientAddress,
         packages,
-        c.env.FEDEX_ACCOUNT_NUMBER,
+        credentials.accountNumber,
         includeHazmat,
       );
 

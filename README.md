@@ -32,8 +32,21 @@ npm install
 npx wrangler secret put FEDEX_CLIENT_ID
 npx wrangler secret put FEDEX_CLIENT_SECRET
 npx wrangler secret put FEDEX_ACCOUNT_NUMBER
-npx wrangler secret put FEDEX_SANDBOX ('true' to use Fedex sandbox APIs)
+npx wrangler secret put FEDEX_SANDBOX_CLIENT_ID
+npx wrangler secret put FEDEX_SANDBOX_CLIENT_SECRET
+npx wrangler secret put FEDEX_SANDBOX_ACCOUNT_NUMBER
 ```
+
+Control behavior using these:
+
+```bash
+npx wrangler secret put FEDEX_SANDBOX
+npx wrangler secret put LOG
+```
+
+Set `FEDEX_SANDBOX` to `true` to use sandbox, otherwise production credentials/APIs will be used.
+
+Set `LOG` to `full` to capture all requests/responses
 
 ### 3. Update Configuration (if needed)
 
@@ -108,12 +121,12 @@ All configuration is stored in `src/config.ts`:
 | --------------------- | ---------------------------------------------- |
 | `LOCAL_DELIVERY_ZIPS` | Set of Miami-Dade and Broward County zip codes |
 | `BOX_CONFIGS`         | Box configurations for packing algorithm       |
-| `HANDLING_FEES_CENTS` | Ground and air handling fees                   |
+| `HAZMAT_FEES_CENTS`   | Hazmat handling fees (ground and air)          |
 
 ## Routing Logic
 
 1. **Local Delivery**: Destination zip in Miami-Dade/Broward list → Free local delivery
-2. **US Domestic**: US destinations → FedEx rates with handling fees
+2. **US Domestic**: US destinations → FedEx rates (+ hazmat fees if applicable)
 3. **International Military**: Non-US + `_customer_type=international_military` → FedEx International
 4. **Freight Forwarding**: All other international → Placeholder rate for manual follow-up
 
@@ -147,7 +160,9 @@ Health check endpoint. Returns `{ "status": "ok", "timestamp": "..." }`.
     config.ts              # Configuration types
 ```
 
-## Handling Fees
+## Hazmat Fees
+
+Hazmat handling fees are added when cart items have `_is_hazmat: "true"` property:
 
 - **Ground Services** (FEDEX_GROUND, GROUND_HOME_DELIVERY): $30 per order
 - **Air/Express Services**: $125 per order

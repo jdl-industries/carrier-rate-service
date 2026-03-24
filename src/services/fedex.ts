@@ -21,14 +21,45 @@ interface CachedToken {
   expiresAt: number;
 }
 
-let tokenCache: CachedToken | null = null;
+// Separate token caches for sandbox and production
+const tokenCaches: { sandbox: CachedToken | null; production: CachedToken | null } = {
+  sandbox: null,
+  production: null,
+};
+
+export function getFedExCredentials(env: Env): {
+  clientId: string;
+  clientSecret: string;
+  accountNumber: string;
+  useSandbox: boolean;
+} {
+  const useSandbox = env.FEDEX_SANDBOX === "true";
+
+  if (useSandbox) {
+    return {
+      clientId: env.FEDEX_SANDBOX_CLIENT_ID || env.FEDEX_CLIENT_ID,
+      clientSecret: env.FEDEX_SANDBOX_CLIENT_SECRET || env.FEDEX_CLIENT_SECRET,
+      accountNumber: env.FEDEX_SANDBOX_ACCOUNT_NUMBER || env.FEDEX_ACCOUNT_NUMBER,
+      useSandbox: true,
+    };
+  }
+
+  return {
+    clientId: env.FEDEX_CLIENT_ID,
+    clientSecret: env.FEDEX_CLIENT_SECRET,
+    accountNumber: env.FEDEX_ACCOUNT_NUMBER,
+    useSandbox: false,
+  };
+}
 
 export async function getFedExAccessToken(env: Env): Promise<string> {
   const now = Date.now();
-  const useSandbox = env.FEDEX_SANDBOX === "true";
+  const { clientId, clientSecret, useSandbox } = getFedExCredentials(env);
+  const cacheKey = useSandbox ? "sandbox" : "production";
+  const cachedToken = tokenCaches[cacheKey];
 
-  if (tokenCache && tokenCache.expiresAt > now) {
-    return tokenCache.accessToken;
+  if (cachedToken && cachedToken.expiresAt > now) {
+    return cachedToken.accessToken;
   }
 
   const oauthEndpoint = `${getFedExApiBase(useSandbox)}/oauth/token`;
@@ -40,8 +71,8 @@ export async function getFedExAccessToken(env: Env): Promise<string> {
     },
     body: new URLSearchParams({
       grant_type: "client_credentials",
-      client_id: env.FEDEX_CLIENT_ID,
-      client_secret: env.FEDEX_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
     }).toString(),
   });
 
@@ -52,7 +83,7 @@ export async function getFedExAccessToken(env: Env): Promise<string> {
 
   const data = (await response.json()) as FedExOAuthResponse;
 
-  tokenCache = {
+  tokenCaches[cacheKey] = {
     accessToken: data.access_token,
     expiresAt:
       now + (data.expires_in - FEDEX_TOKEN_EXPIRY_BUFFER_SECONDS) * 1000,
