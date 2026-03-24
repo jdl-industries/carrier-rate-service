@@ -95,10 +95,15 @@ function shopifyAddressToFedEx(
   };
 }
 
+function formatCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 function fedExRatesToShopifyRates(
   fedExRates: ParsedFedExRate[],
   request: ShopifyRateRequest,
   defaultHandlingDays: number,
+  includeHazmat: boolean,
 ): ShopifyRate[] {
   const rates: ShopifyRate[] = [];
   const items = request.rate.items;
@@ -117,14 +122,20 @@ function fedExRatesToShopifyRates(
       defaultHandlingDays,
     );
 
-    rates.push({
+    const rate: ShopifyRate = {
       service_name: fedExRate.serviceName,
       service_code: fedExRate.serviceType,
       total_price: totalPriceCents.toString(),
       currency: "USD",
       min_delivery_date: deliveryDates.minDeliveryDateISO,
       max_delivery_date: deliveryDates.maxDeliveryDateISO,
-    });
+    };
+
+    if (includeHazmat) {
+      rate.description = `Includes ${formatCents(handlingFee)} hazmat handling fee`;
+    }
+
+    rates.push(rate);
   }
 
   return rates;
@@ -355,6 +366,7 @@ export async function handleRateRequest(
     }
 
     let parsedRates: ParsedFedExRate[];
+    const includeHazmat = hasHazmatItems(items);
 
     if (isDynamicTest) {
       // Dynamic test mode: use mock FedEx rates
@@ -366,7 +378,6 @@ export async function handleRateRequest(
       const shipperAddress = shopifyAddressToFedEx(request.rate.origin);
       const recipientAddress = shopifyAddressToFedEx(request.rate.destination);
 
-      const includeHazmat = hasHazmatItems(items);
       const rateRequest = buildFedExRateRequest(
         shipperAddress,
         recipientAddress,
@@ -412,6 +423,7 @@ export async function handleRateRequest(
       parsedRates,
       request,
       defaultHandlingDays,
+      includeHazmat,
     );
 
     const response = { rates: shopifyRates } as ShopifyRateResponse;
