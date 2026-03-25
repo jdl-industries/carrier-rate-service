@@ -112,10 +112,12 @@ describe('parseFedExRateResponse', () => {
     const rates = parseFedExRateResponse(mockFedExResponse, false);
 
     const twoDayRate = rates.find((r) => r.serviceType === 'FEDEX_2_DAY');
-    expect(twoDayRate?.deliveryDate).toBe('2024-01-12T17:00:00');
+    expect(twoDayRate?.deliveryDate).toBe('2024-01-12');
+    expect(twoDayRate?.deliveryTimestamp).toBe('2024-01-12T17:00:00');
 
     const priorityRate = rates.find((r) => r.serviceType === 'PRIORITY_OVERNIGHT');
     expect(priorityRate?.deliveryDate).toBe('2024-01-10');
+    expect(priorityRate?.deliveryTimestamp).toBeNull(); // operationalDetail doesn't have timestamp
   });
 
   it('returns empty array for missing rateReplyDetails', () => {
@@ -183,6 +185,8 @@ describe('rate calculation with handling fees', () => {
       totalChargeCents: 2500,
       transitDays: 3,
       deliveryDate: null,
+      deliveryTimestamp: null,
+      deliveryDayOfWeek: null,
     },
     {
       serviceType: 'FEDEX_2_DAY',
@@ -190,6 +194,8 @@ describe('rate calculation with handling fees', () => {
       totalChargeCents: 4500,
       transitDays: 2,
       deliveryDate: null,
+      deliveryTimestamp: null,
+      deliveryDayOfWeek: null,
     },
   ];
 
@@ -322,6 +328,8 @@ describe('mock FedEx rate generation', () => {
         totalChargeCents: Math.round(4500 + totalWeightLbs * 350),
         transitDays: 5,
         deliveryDate: null,
+        deliveryTimestamp: null,
+        deliveryDayOfWeek: null,
       });
       rates.push({
         serviceType: 'INTERNATIONAL_PRIORITY',
@@ -329,6 +337,8 @@ describe('mock FedEx rate generation', () => {
         totalChargeCents: Math.round(7500 + totalWeightLbs * 500),
         transitDays: 3,
         deliveryDate: null,
+        deliveryTimestamp: null,
+        deliveryDayOfWeek: null,
       });
     } else {
       rates.push({
@@ -337,6 +347,8 @@ describe('mock FedEx rate generation', () => {
         totalChargeCents: Math.round(1200 + totalWeightLbs * 45),
         transitDays: 5,
         deliveryDate: null,
+        deliveryTimestamp: null,
+        deliveryDayOfWeek: null,
       });
       rates.push({
         serviceType: 'FEDEX_EXPRESS_SAVER',
@@ -344,6 +356,8 @@ describe('mock FedEx rate generation', () => {
         totalChargeCents: Math.round(2800 + totalWeightLbs * 85),
         transitDays: 3,
         deliveryDate: null,
+        deliveryTimestamp: null,
+        deliveryDayOfWeek: null,
       });
       rates.push({
         serviceType: 'FEDEX_2_DAY',
@@ -351,6 +365,8 @@ describe('mock FedEx rate generation', () => {
         totalChargeCents: Math.round(4200 + totalWeightLbs * 120),
         transitDays: 2,
         deliveryDate: null,
+        deliveryTimestamp: null,
+        deliveryDayOfWeek: null,
       });
       rates.push({
         serviceType: 'PRIORITY_OVERNIGHT',
@@ -358,6 +374,8 @@ describe('mock FedEx rate generation', () => {
         totalChargeCents: Math.round(6500 + totalWeightLbs * 180),
         transitDays: 1,
         deliveryDate: null,
+        deliveryTimestamp: null,
+        deliveryDayOfWeek: null,
       });
     }
 

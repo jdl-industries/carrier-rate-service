@@ -253,9 +253,21 @@ export function parseFedExRateResponse(
 
     let transitDays = 1;
     let deliveryDate: string | null = null;
+    let deliveryTimestamp: string | null = null;
+    let deliveryDayOfWeek: string | null = null;
 
-    if (detail.commit?.deliveryTimestamp) {
-      deliveryDate = detail.commit.deliveryTimestamp;
+    // Extract delivery date/time from commit.dateDetail (preferred) or fallback sources
+    // FedEx API uses different field names: dayFormat or dayCxsFormat
+    const dateDetailTimestamp =
+      detail.commit?.dateDetail?.dayFormat ||
+      detail.commit?.dateDetail?.dayCxsFormat;
+    if (dateDetailTimestamp) {
+      deliveryTimestamp = dateDetailTimestamp;
+      deliveryDayOfWeek = detail.commit?.dateDetail?.dayOfWeek || null;
+      deliveryDate = deliveryTimestamp.split("T")[0];
+    } else if (detail.commit?.deliveryTimestamp) {
+      deliveryTimestamp = detail.commit.deliveryTimestamp;
+      deliveryDate = deliveryTimestamp.split("T")[0];
     } else if (detail.operationalDetail?.deliveryDate) {
       deliveryDate = detail.operationalDetail.deliveryDate;
     }
@@ -281,6 +293,8 @@ export function parseFedExRateResponse(
       totalChargeCents,
       transitDays,
       deliveryDate,
+      deliveryTimestamp,
+      deliveryDayOfWeek,
     });
   }
 

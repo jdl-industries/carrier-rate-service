@@ -100,6 +100,44 @@ function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function formatDeliveryEstimate(
+  timestamp: string | null,
+  dayOfWeek: string | null,
+): string | null {
+  if (!timestamp) return null;
+
+  try {
+    // Parse timestamp like "2026-03-26T08:30:00" directly from string
+    // to avoid timezone conversion issues
+    const match = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!match) return null;
+
+    const [, year, monthNum, dayNum, hourStr, minuteStr] = match;
+    const monthIndex = parseInt(monthNum, 10) - 1;
+    const day = parseInt(dayNum, 10);
+    const hours = parseInt(hourStr, 10);
+    const minutes = parseInt(minuteStr, 10);
+
+    // Format month name
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[monthIndex];
+
+    // Format time as "8:30 AM"
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const hour12 = hours % 12 || 12;
+    const timeStr = minutes > 0
+      ? `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
+      : `${hour12} ${ampm}`;
+
+    // Build description like "Delivery by Thu, Mar 26 by 8:30 AM"
+    const dayStr = dayOfWeek ? `${dayOfWeek}, ` : "";
+    return `Delivery by ${dayStr}${month} ${day} by ${timeStr}`;
+  } catch {
+    return null;
+  }
+}
+
 function fedExRatesToShopifyRates(
   fedExRates: ParsedFedExRate[],
   request: ShopifyRateRequest,
@@ -125,6 +163,21 @@ function fedExRatesToShopifyRates(
       defaultHandlingDays,
     );
 
+    // Build description parts
+    const descriptionParts: string[] = [];
+
+    const deliveryEstimate = formatDeliveryEstimate(
+      fedExRate.deliveryTimestamp,
+      fedExRate.deliveryDayOfWeek,
+    );
+    if (deliveryEstimate) {
+      descriptionParts.push(deliveryEstimate);
+    }
+
+    if (includeHazmat) {
+      descriptionParts.push(`Includes ${formatCents(handlingFee)} hazmat handling fee`);
+    }
+
     const rate: ShopifyRate = {
       service_name: fedExRate.serviceName,
       service_code: fedExRate.serviceType,
@@ -134,8 +187,8 @@ function fedExRatesToShopifyRates(
       max_delivery_date: deliveryDates.maxDeliveryDateISO,
     };
 
-    if (includeHazmat) {
-      rate.description = `Includes ${formatCents(handlingFee)} hazmat handling fee`;
+    if (descriptionParts.length > 0) {
+      rate.description = descriptionParts.join(" · ");
     }
 
     rates.push(rate);
@@ -198,6 +251,8 @@ function generateMockFedExRates(
       totalChargeCents: Math.round(4500 + totalWeightLbs * 350),
       transitDays: 5,
       deliveryDate: null,
+      deliveryTimestamp: null,
+      deliveryDayOfWeek: null,
     });
     rates.push({
       serviceType: "INTERNATIONAL_PRIORITY",
@@ -205,6 +260,8 @@ function generateMockFedExRates(
       totalChargeCents: Math.round(7500 + totalWeightLbs * 500),
       transitDays: 3,
       deliveryDate: null,
+      deliveryTimestamp: null,
+      deliveryDayOfWeek: null,
     });
   } else {
     // Domestic services
@@ -214,6 +271,8 @@ function generateMockFedExRates(
       totalChargeCents: Math.round(1200 + totalWeightLbs * 45),
       transitDays: 5,
       deliveryDate: null,
+      deliveryTimestamp: null,
+      deliveryDayOfWeek: null,
     });
     rates.push({
       serviceType: "FEDEX_EXPRESS_SAVER",
@@ -221,6 +280,8 @@ function generateMockFedExRates(
       totalChargeCents: Math.round(2800 + totalWeightLbs * 85),
       transitDays: 3,
       deliveryDate: null,
+      deliveryTimestamp: null,
+      deliveryDayOfWeek: null,
     });
     rates.push({
       serviceType: "FEDEX_2_DAY",
@@ -228,6 +289,8 @@ function generateMockFedExRates(
       totalChargeCents: Math.round(4200 + totalWeightLbs * 120),
       transitDays: 2,
       deliveryDate: null,
+      deliveryTimestamp: null,
+      deliveryDayOfWeek: null,
     });
     rates.push({
       serviceType: "PRIORITY_OVERNIGHT",
@@ -235,6 +298,8 @@ function generateMockFedExRates(
       totalChargeCents: Math.round(6500 + totalWeightLbs * 180),
       transitDays: 1,
       deliveryDate: null,
+      deliveryTimestamp: null,
+      deliveryDayOfWeek: null,
     });
   }
 

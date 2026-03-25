@@ -125,6 +125,7 @@ export interface FedExRateReplyDetail {
     dateDetail?: {
       dayOfWeek?: string;
       dayCxsFormat?: string;
+      dayFormat?: string; // Alternative field name used in some API responses
     };
     transitDays?: {
       description?: string;
@@ -173,4 +174,6 @@ export interface ParsedFedExRate {
   totalChargeCents: number;
   transitDays: number;
   deliveryDate: string | null;
+  deliveryTimestamp: string | null; // Full timestamp e.g. "2026-03-26T08:30:00"
+  deliveryDayOfWeek: string | null; // e.g. "Thu"
 }
