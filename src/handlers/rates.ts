@@ -25,6 +25,8 @@ import {
 } from "../services/fedex";
 import {
   calculateDeliveryDates,
+  calculateShipDate,
+  getMaxHandlingDays,
   addBusinessDays,
   formatDateISO,
   DEFAULT_HANDLING_DAYS,
@@ -454,12 +456,18 @@ export async function handleRateRequest(
       const shipperAddress = shopifyAddressToFedEx(request.rate.origin);
       const recipientAddress = shopifyAddressToFedEx(request.rate.destination);
 
+      // Calculate ship date based on item handling/lead times
+      const defaultHandlingDays = getDefaultHandlingDays(c.env);
+      const handlingDays = getMaxHandlingDays(items, defaultHandlingDays);
+      const shipDate = calculateShipDate(handlingDays);
+
       const rateRequest = buildFedExRateRequest(
         shipperAddress,
         recipientAddress,
         packages,
         credentials.accountNumber,
         includeHazmat,
+        shipDate,
       );
 
       logger.debugPayload("FedEx rate request", rateRequest);

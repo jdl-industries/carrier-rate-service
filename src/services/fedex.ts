@@ -98,9 +98,9 @@ export function buildFedExRateRequest(
   packages: FedExPackageLineItem[],
   accountNumber: string,
   includeHazmat: boolean = false,
+  shipDate: Date = new Date(),
 ): FedExRateRequest {
-  const today = new Date();
-  const shipDateStamp = today.toISOString().split("T")[0];
+  const shipDateStamp = shipDate.toISOString().split("T")[0];
 
   // Add dangerous goods handling if any items are hazmat
   // Note: For rate quotes, we just flag the service type - detailed DG info is for shipping labels

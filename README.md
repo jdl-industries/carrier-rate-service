@@ -1,6 +1,6 @@
 # JDL Carrier Rate Service
 
-A Cloudflare Worker that implements a Shopify carrier rate service to provide customm shipping rates for JDL's Shopify store.
+A Cloudflare Worker that implements a Shopify carrier rate service to provide custom shipping rates for JDL's Shopify store.
 
 ## Features
 
