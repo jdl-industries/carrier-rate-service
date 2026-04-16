@@ -425,10 +425,7 @@ export async function handleRateRequest(
     customerType: route.customerType,
   });
 
-  if (route.routeType === "local_delivery") {
-    const rate = buildLocalDeliveryRate();
-    return c.json({ rates: [rate] } as ShopifyRateResponse, 200);
-  }
+  const isLocalDelivery = route.routeType === "local_delivery";
 
   if (route.routeType === "freight_forwarding") {
     const rate = buildFreightForwardingRate();
@@ -499,6 +496,10 @@ export async function handleRateRequest(
         destinationZip: request.rate.destination.postal_code,
         routeType: route.routeType,
       });
+      // Still offer local delivery if in local zone, even if FedEx fails
+      if (isLocalDelivery) {
+        return c.json({ rates: [buildLocalDeliveryRate()] }, 200);
+      }
       return c.json({ rates: [] }, 200);
     }
 
@@ -509,6 +510,11 @@ export async function handleRateRequest(
       defaultHandlingDays,
       includeHazmat,
     );
+
+    // Prepend local delivery option if in local delivery zone
+    if (isLocalDelivery) {
+      shopifyRates.unshift(buildLocalDeliveryRate());
+    }
 
     const response = { rates: shopifyRates } as ShopifyRateResponse;
     logger.debugPayload("Shopify rate response", response);
