@@ -25,4 +25,8 @@ export interface Env {
   FEDEX_SANDBOX?: string;
   DEFAULT_HANDLING_DAYS?: string;
   LOG?: string; // Set to 'full' to enable verbose request/response logging
+  // Cloudflare KV namespace for variant metafield data (fallback for draft orders)
+  VARIANT_DATA: KVNamespace;
+  // Shopify webhook secret for HMAC verification
+  SHOPIFY_WEBHOOK_SECRET?: string;
 }

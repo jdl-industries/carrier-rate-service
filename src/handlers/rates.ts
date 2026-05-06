@@ -31,6 +31,7 @@ import {
   formatDateISO,
   DEFAULT_HANDLING_DAYS,
 } from "../services/leadtimes";
+import { enrichItemsFromKV } from "../services/variant-data";
 import { createLogger, type Logger } from "../services/logger";
 import type { ShopifyCartItem } from "../types";
 
@@ -402,7 +403,9 @@ export async function handleRateRequest(
 
   logger.debugPayload("Shopify rate request", request);
 
-  const items = request.rate.items;
+  // Enrich items with KV fallback data if properties are missing (e.g., draft orders)
+  const enrichedItems = await enrichItemsFromKV(request.rate.items, c.env);
+  const items = enrichedItems;
   const testMode = getTestMode(testParam, items);
 
   if (testMode === "static") {
