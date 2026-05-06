@@ -29,4 +29,7 @@ export interface Env {
   VARIANT_DATA: KVNamespace;
   // Shopify webhook secret for HMAC verification
   SHOPIFY_WEBHOOK_SECRET?: string;
+  // Shopify Admin API credentials (for bulk sync)
+  SHOPIFY_STORE_DOMAIN?: string;
+  SHOPIFY_ADMIN_TOKEN?: string;
 }
