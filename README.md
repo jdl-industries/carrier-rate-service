@@ -10,6 +10,7 @@ A Cloudflare Worker that implements a Shopify carrier rate service to provide cu
 - **Freight Forwarding**: Placeholder rates for non-military international orders
 - **Dangerous Goods Handling**: All shipments flagged with proper Dangerous Goods (DG) parameters
 - **Dynamic Box Packing**: Greedy bin-packing algorithm for optimal packaging
+- **Draft Order Support**: KV-based fallback for variant metafields when cart properties are missing (e.g., draft orders created in Shopify Admin)
 
 ## Prerequisites
 
@@ -28,6 +29,8 @@ npm install
 
 ### 2. Set Secrets
 
+**FedEx API credentials:**
+
 ```bash
 npx wrangler secret put FEDEX_CLIENT_ID
 npx wrangler secret put FEDEX_CLIENT_SECRET
@@ -37,7 +40,15 @@ npx wrangler secret put FEDEX_SANDBOX_CLIENT_SECRET
 npx wrangler secret put FEDEX_SANDBOX_ACCOUNT_NUMBER
 ```
 
-Control behavior using these:
+**Shopify credentials (for webhooks and bulk sync):**
+
+```bash
+npx wrangler secret put SHOPIFY_WEBHOOK_SECRET   # API secret key (shpss_...) for HMAC verification
+npx wrangler secret put SHOPIFY_STORE_DOMAIN     # e.g., your-store.myshopify.com
+npx wrangler secret put SHOPIFY_ADMIN_TOKEN      # Admin API access token (shpat_...) - see instructions below
+```
+
+**Control behavior:**
 
 ```bash
 npx wrangler secret put FEDEX_SANDBOX
@@ -81,7 +92,7 @@ npm run deploy
 A Shopify app needs to be created and installed in the JDL store in order to get the admin api token needed to register this custom carrier service using the admin api. This is best done in the [Shopify dev dashboard](https://dev.shopify.com/dashboard). Use the "Start from Dev Dashboard" option and specify:
 
 - App name: JDL Custom Shipping
-- scope(s): write_shipping
+- scope(s): `write_shipping`, `read_products`
 
 After creating the app, select the distribution method using the link in the right sidebar (opt for one store only). Then install the app in the JDL store.
 
@@ -113,6 +124,59 @@ curl -X POST "https://jdl-industries-inc-aviation.myshopify.com/admin/api/2024-0
   }'
 ```
 
+## Webhook Setup for Draft Order Support
+
+Draft orders created in Shopify Admin don't include the custom cart line item properties that the storefront adds via JavaScript. To support accurate shipping rates for draft orders, variant metafield data is cached in Cloudflare KV and used as a fallback.
+
+### Register the Products Update Webhook
+
+Run this in Shopify Admin GraphiQL (Settings → Apps → Develop apps → [App] → GraphiQL):
+
+```graphql
+mutation {
+  webhookSubscriptionCreate(
+    topic: PRODUCTS_UPDATE
+    webhookSubscription: {
+      callbackUrl: "https://carrier-rate-service.jdlindustries.workers.dev/webhooks/products"
+      format: JSON
+      metafieldNamespaces: ["custom"]
+    }
+  ) {
+    webhookSubscription {
+      id
+      topic
+      metafieldNamespaces
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+```
+
+This webhook fires when products or variants are updated, syncing metafield data to KV.
+
+### Bulk Sync Existing Products
+
+To populate KV with all existing variant data (one-time or as needed):
+
+```bash
+curl -X POST https://carrier-rate-service.jdlindustries.workers.dev/admin/sync \
+  -H "X-Admin-Secret: YOUR_SHOPIFY_WEBHOOK_SECRET"
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "totalProducts": 150,
+  "totalVariants": 420,
+  "variantsWithData": 385
+}
+```
+
 ## Configuration
 
 All configuration is stored in `src/config.ts`:
@@ -134,11 +198,19 @@ All configuration is stored in `src/config.ts`:
 
 ### `POST /rates`
 
-Shopify carrier service callback.
+Shopify carrier service callback. Accepts Shopify rate request payload, returns shipping rates.
 
 ### `GET /health`
 
 Health check endpoint. Returns `{ "status": "ok", "timestamp": "..." }`.
+
+### `POST /webhooks/products`
+
+Shopify webhook endpoint for `products/update` topic. Syncs variant metafield data to KV.
+
+### `POST /admin/sync`
+
+Bulk sync all products/variants to KV. Requires `X-Admin-Secret` header matching `SHOPIFY_WEBHOOK_SECRET`.
 
 ## Project Structure
 
@@ -148,17 +220,36 @@ Health check endpoint. Returns `{ "status": "ok", "timestamp": "..." }`.
   config.ts                # App configuration (fees, zip codes, FedEx settings)
   /handlers
     rates.ts               # Main rate handler
+    webhooks.ts            # Shopify webhook handler (products/update)
+    sync.ts                # Bulk sync handler for KV population
   /services
     fedex.ts               # FedEx OAuth + Rate API
     packaging.ts           # Box packing algorithm
     routing.ts             # Routing decision tree
     leadtimes.ts           # Lead time calculations
+    variant-data.ts        # KV lookup and item enrichment
     *.test.ts              # Unit tests
   /types
     shopify.ts             # Shopify types
     fedex.ts               # FedEx API types
-    config.ts              # Configuration types
+    config.ts              # Configuration types (includes Env with KV binding)
 ```
+
+## Variant Metafield Fallback (KV)
+
+When cart items are missing required properties (e.g., draft orders from Shopify Admin), the service falls back to Cloudflare KV for variant data.
+
+**Metafields synced to KV:**
+
+| Shopify Metafield            | KV Field    | Cart Property |
+| ---------------------------- | ----------- | ------------- |
+| `custom.height` (variant)    | `height`    | `_height`     |
+| `custom.width` (variant)     | `width`     | `_width`      |
+| `custom.length` (variant)    | `length`    | `_length`     |
+| `custom.lead_time` (product) | `lead_time` | `_lead_time`  |
+| `custom.is_hazmat` (product) | `is_hazmat` | `_is_hazmat`  |
+
+KV key format: `variant:{variant_id}`
 
 ## Hazmat Fees
 
