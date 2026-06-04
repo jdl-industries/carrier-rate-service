@@ -32,4 +32,7 @@ export interface Env {
   // Shopify Admin API credentials (for bulk sync)
   SHOPIFY_STORE_DOMAIN?: string;
   SHOPIFY_ADMIN_TOKEN?: string;
+  // Shopify OAuth credentials (for Authorization Code Grant flow)
+  SHOPIFY_CLIENT_ID?: string;
+  SHOPIFY_CLIENT_SECRET?: string;
 }

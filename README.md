@@ -40,12 +40,14 @@ npx wrangler secret put FEDEX_SANDBOX_CLIENT_SECRET
 npx wrangler secret put FEDEX_SANDBOX_ACCOUNT_NUMBER
 ```
 
-**Shopify credentials (for webhooks and bulk sync):**
+**Shopify credentials (for OAuth, webhooks, and bulk sync):**
 
 ```bash
+npx wrangler secret put SHOPIFY_CLIENT_ID        # App Client ID from Shopify Partner Dashboard
+npx wrangler secret put SHOPIFY_CLIENT_SECRET    # App Client Secret from Shopify Partner Dashboard
 npx wrangler secret put SHOPIFY_WEBHOOK_SECRET   # API secret key (shpss_...) for HMAC verification
 npx wrangler secret put SHOPIFY_STORE_DOMAIN     # e.g., your-store.myshopify.com
-npx wrangler secret put SHOPIFY_ADMIN_TOKEN      # Admin API access token (shpat_...) - see instructions below
+npx wrangler secret put SHOPIFY_ADMIN_TOKEN      # Admin API access token (shpat_...) - obtained via OAuth flow below
 ```
 
 **Control behavior:**
@@ -89,29 +91,59 @@ npm run deploy
 
 ## Register an App and the Carrier Service with Shopify
 
-A Shopify app needs to be created and installed in the JDL store in order to get the admin api token needed to register this custom carrier service using the admin api. This is best done in the [Shopify dev dashboard](https://dev.shopify.com/dashboard). Use the "Start from Dev Dashboard" option and specify:
+A Shopify app needs to be created and installed in the store in order to get the admin API token needed to register this custom carrier service. This is best done in the [Shopify Partner Dashboard](https://partners.shopify.com/).
+
+### 1. Create the App
+
+In the Partner Dashboard, create a new app with:
 
 - App name: JDL Custom Shipping
-- scope(s): `write_shipping`, `read_products`
+- Scope(s): `write_shipping`, `read_products`
 
-After creating the app, select the distribution method using the link in the right sidebar (opt for one store only). Then install the app in the JDL store.
+### 2. Configure Allowed Redirect URLs
 
-Once the app has been installed, fetch an admin api access token using the [client credential grant flow](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/client-credentials-grant) as follows:
+In the app configuration under **URLs** → **Allowed redirection URL(s)**, add:
 
-```bash
-curl -X POST \
-  "https://jdl-industries-inc-aviation.myshopify.com/admin/oauth/access_token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=CLIENT_ID_FROM_DEV_DASHBOARD" \
-  -d "client_secret=CLIENT_SECRET_FROM_DEV_DASHBOARD"
+```
+https://carrier-rate-service.jdlindustries.workers.dev/auth/callback
 ```
 
-After deploying, register the carrier service with Shopify using the Admin API:
+### 3. Store OAuth Credentials
+
+Copy the **Client ID** and **Client secret** from the app's **Client credentials** section:
 
 ```bash
-curl -X POST "https://jdl-industries-inc-aviation.myshopify.com/admin/api/2024-01/carrier_services.json" \
-  -H "X-Shopify-Access-Token: ADMIN_API_TOKEN_FROM_RESPONSE_ABOVE" \
+npx wrangler secret put SHOPIFY_CLIENT_ID
+npx wrangler secret put SHOPIFY_CLIENT_SECRET
+```
+
+### 4. Deploy and Run OAuth Flow
+
+Deploy the worker, then open this URL in your browser (replace with the target store domain):
+
+```
+https://carrier-rate-service.jdlindustries.workers.dev/auth/install?shop=YOUR-STORE.myshopify.com
+```
+
+Click "Authorize App" and approve the permissions in Shopify. After authorization, you'll see a success page with:
+
+- The admin API access token
+- Ready-to-run curl commands to register the carrier service
+
+### 5. Store the Access Token
+
+```bash
+npx wrangler secret put SHOPIFY_ADMIN_TOKEN
+# Paste the access token from the success page
+```
+
+### 6. Register the Carrier Service
+
+The success page provides the exact curl command. It will look like:
+
+```bash
+curl -X POST "https://YOUR-STORE.myshopify.com/admin/api/2024-01/carrier_services.json" \
+  -H "X-Shopify-Access-Token: YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "carrier_service": {
@@ -122,6 +154,13 @@ curl -X POST "https://jdl-industries-inc-aviation.myshopify.com/admin/api/2024-0
       "format": "json"
     }
   }'
+```
+
+### 7. Verify Registration
+
+```bash
+curl "https://YOUR-STORE.myshopify.com/admin/api/2024-01/carrier_services.json" \
+  -H "X-Shopify-Access-Token: YOUR_ACCESS_TOKEN"
 ```
 
 ## Webhook Setup for Draft Order Support
@@ -212,6 +251,14 @@ Shopify webhook endpoint for `products/update` topic. Syncs variant metafield da
 
 Bulk sync all products/variants to KV. Requires `X-Admin-Secret` header matching `SHOPIFY_WEBHOOK_SECRET`.
 
+### `GET /auth/install`
+
+OAuth install endpoint. Redirects to Shopify authorization page. Requires `?shop=your-store.myshopify.com` query parameter.
+
+### `GET /auth/callback`
+
+OAuth callback endpoint. Exchanges authorization code for access token and displays setup instructions.
+
 ## Project Structure
 
 ```
@@ -222,6 +269,7 @@ Bulk sync all products/variants to KV. Requires `X-Admin-Secret` header matching
     rates.ts               # Main rate handler
     webhooks.ts            # Shopify webhook handler (products/update)
     sync.ts                # Bulk sync handler for KV population
+    oauth.ts               # Shopify OAuth Authorization Code Grant flow
   /services
     fedex.ts               # FedEx OAuth + Rate API
     packaging.ts           # Box packing algorithm
