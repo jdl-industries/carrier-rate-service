@@ -5,6 +5,7 @@ import {
   packItems,
   packedBoxesToFedExPackages,
   getPackagesForCart,
+  cartContainsHazmat,
 } from "./packaging";
 import type { ShopifyCartItem, BoxConfig } from "../types";
 import { GRAMS_PER_LB } from "../config";
@@ -17,6 +18,7 @@ const TEST_BOX_CONFIGS: BoxConfig[] = [
     height: 8,
     maxWeightLbs: 20,
     emptyWeightLbs: 1,
+    hazmat: false,
   },
   {
     name: "medium",
@@ -25,6 +27,7 @@ const TEST_BOX_CONFIGS: BoxConfig[] = [
     height: 10,
     maxWeightLbs: 40,
     emptyWeightLbs: 2,
+    hazmat: false,
   },
   {
     name: "large",
@@ -33,6 +36,29 @@ const TEST_BOX_CONFIGS: BoxConfig[] = [
     height: 12,
     maxWeightLbs: 70,
     emptyWeightLbs: 3,
+    hazmat: false,
+  },
+];
+
+const TEST_BOX_CONFIGS_WITH_HAZMAT: BoxConfig[] = [
+  ...TEST_BOX_CONFIGS,
+  {
+    name: "hazmat-small",
+    length: 12,
+    width: 12,
+    height: 8,
+    maxWeightLbs: 20,
+    emptyWeightLbs: 1.5,
+    hazmat: true,
+  },
+  {
+    name: "hazmat-medium",
+    length: 18,
+    width: 14,
+    height: 10,
+    maxWeightLbs: 35,
+    emptyWeightLbs: 2.5,
+    hazmat: true,
   },
 ];
 
@@ -194,6 +220,7 @@ describe("packedBoxesToFedExPackages", () => {
         totalWeightLbs: 15.5,
         itemWeightLbs: 14.5,
         usedFloorArea: 100,
+        isHazmat: false,
       },
     ];
 
@@ -216,6 +243,7 @@ describe("packedBoxesToFedExPackages", () => {
         totalWeightLbs: 15.5555,
         itemWeightLbs: 14.5555,
         usedFloorArea: 100,
+        isHazmat: false,
       },
     ];
 
@@ -404,5 +432,187 @@ describe("dimension-based packing", () => {
 
     expect(packed).toHaveLength(1);
     expect(packed[0].usedFloorArea).toBeCloseTo(42.25, 2); // 6.5x6.5
+  });
+});
+
+describe("hazmat-aware packing", () => {
+  it("packs hazmat items into hazmat boxes", () => {
+    const items = [
+      createCartItem({
+        grams: Math.round(5 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: { _is_hazmat: "true" },
+      }),
+    ];
+    const packed = packItems(items, TEST_BOX_CONFIGS_WITH_HAZMAT);
+
+    expect(packed).toHaveLength(1);
+    expect(packed[0].box.hazmat).toBe(true);
+    expect(packed[0].isHazmat).toBe(true);
+  });
+
+  it("packs non-hazmat items into non-hazmat boxes", () => {
+    const items = [
+      createCartItem({
+        grams: Math.round(5 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: { _is_hazmat: "false" },
+      }),
+    ];
+    const packed = packItems(items, TEST_BOX_CONFIGS_WITH_HAZMAT);
+
+    expect(packed).toHaveLength(1);
+    expect(packed[0].box.hazmat).toBe(false);
+    expect(packed[0].isHazmat).toBe(false);
+  });
+
+  it("packs items without hazmat property as non-hazmat", () => {
+    const items = [
+      createCartItem({
+        grams: Math.round(5 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: {},
+      }),
+    ];
+    const packed = packItems(items, TEST_BOX_CONFIGS_WITH_HAZMAT);
+
+    expect(packed).toHaveLength(1);
+    expect(packed[0].box.hazmat).toBe(false);
+    expect(packed[0].isHazmat).toBe(false);
+  });
+
+  it("separates hazmat and non-hazmat items into different boxes", () => {
+    const items = [
+      createCartItem({
+        grams: Math.round(3 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: { _is_hazmat: "true" },
+      }),
+      createCartItem({
+        grams: Math.round(3 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: { _is_hazmat: "false" },
+      }),
+    ];
+    const packed = packItems(items, TEST_BOX_CONFIGS_WITH_HAZMAT);
+
+    expect(packed).toHaveLength(2);
+    const hazmatBox = packed.find((p) => p.isHazmat);
+    const nonHazmatBox = packed.find((p) => !p.isHazmat);
+    expect(hazmatBox).toBeDefined();
+    expect(nonHazmatBox).toBeDefined();
+    expect(hazmatBox?.box.hazmat).toBe(true);
+    expect(nonHazmatBox?.box.hazmat).toBe(false);
+  });
+
+  it("packs multiple hazmat items together in hazmat boxes", () => {
+    const items = [
+      createCartItem({
+        grams: Math.round(3 * GRAMS_PER_LB),
+        quantity: 2,
+        properties: { _is_hazmat: "true" },
+      }),
+    ];
+    const packed = packItems(items, TEST_BOX_CONFIGS_WITH_HAZMAT);
+
+    expect(packed).toHaveLength(1);
+    expect(packed[0].box.hazmat).toBe(true);
+    expect(packed[0].isHazmat).toBe(true);
+    expect(packed[0].itemWeightLbs).toBeCloseTo(6, 1);
+  });
+
+  it("uses larger hazmat box when weight exceeds small hazmat box", () => {
+    const items = [
+      createCartItem({
+        grams: Math.round(18 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: { _is_hazmat: "true" },
+      }),
+    ];
+    const packed = packItems(items, TEST_BOX_CONFIGS_WITH_HAZMAT);
+
+    expect(packed).toHaveLength(1);
+    expect(packed[0].box.name).toBe("hazmat-medium");
+    expect(packed[0].box.hazmat).toBe(true);
+  });
+
+  it("throws error when no hazmat boxes available for hazmat items", () => {
+    const items = [
+      createCartItem({
+        grams: Math.round(5 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: { _is_hazmat: "true" },
+      }),
+    ];
+    // TEST_BOX_CONFIGS has no hazmat boxes
+    expect(() => packItems(items, TEST_BOX_CONFIGS)).toThrow(
+      "No hazmat box configurations available",
+    );
+  });
+
+  it("throws error when no non-hazmat boxes available for non-hazmat items", () => {
+    const hazmatOnlyBoxes: BoxConfig[] = [
+      {
+        name: "hazmat-only",
+        length: 12,
+        width: 12,
+        height: 8,
+        maxWeightLbs: 20,
+        emptyWeightLbs: 1,
+        hazmat: true,
+      },
+    ];
+    const items = [
+      createCartItem({
+        grams: Math.round(5 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: { _is_hazmat: "false" },
+      }),
+    ];
+    expect(() => packItems(items, hazmatOnlyBoxes)).toThrow(
+      "No non-hazmat box configurations available",
+    );
+  });
+
+  it("recognizes _is_hazmat value of '1' as hazmat", () => {
+    const items = [
+      createCartItem({
+        grams: Math.round(5 * GRAMS_PER_LB),
+        quantity: 1,
+        properties: { _is_hazmat: "1" },
+      }),
+    ];
+    const packed = packItems(items, TEST_BOX_CONFIGS_WITH_HAZMAT);
+
+    expect(packed).toHaveLength(1);
+    expect(packed[0].box.hazmat).toBe(true);
+    expect(packed[0].isHazmat).toBe(true);
+  });
+});
+
+describe("cartContainsHazmat", () => {
+  it("returns true when cart contains hazmat items", () => {
+    const items = [
+      createCartItem({ properties: { _is_hazmat: "true" } }),
+      createCartItem({ properties: {} }),
+    ];
+    expect(cartContainsHazmat(items)).toBe(true);
+  });
+
+  it("returns false when cart contains no hazmat items", () => {
+    const items = [
+      createCartItem({ properties: { _is_hazmat: "false" } }),
+      createCartItem({ properties: {} }),
+    ];
+    expect(cartContainsHazmat(items)).toBe(false);
+  });
+
+  it("returns false for empty cart", () => {
+    expect(cartContainsHazmat([])).toBe(false);
+  });
+
+  it("recognizes _is_hazmat value of '1' as hazmat", () => {
+    const items = [createCartItem({ properties: { _is_hazmat: "1" } })];
+    expect(cartContainsHazmat(items)).toBe(true);
   });
 });

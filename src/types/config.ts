@@ -5,6 +5,7 @@ export interface BoxConfig {
   height: number;
   maxWeightLbs: number;
   emptyWeightLbs: number;
+  hazmat: boolean;
 }
 
 export interface HazmatFees {

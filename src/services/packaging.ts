@@ -15,6 +15,7 @@ export interface PackedBox {
   totalWeightLbs: number;
   itemWeightLbs: number;
   usedFloorArea: number; // square inches
+  isHazmat: boolean;
 }
 
 interface ItemDimensions {
@@ -28,6 +29,7 @@ interface PackableItem {
   weightLbs: number;
   dimensions: ItemDimensions;
   floorArea: number; // length × width
+  isHazmat: boolean;
 }
 
 export function gramsToLbs(grams: number): number {
@@ -38,6 +40,10 @@ export function calculateTotalCartWeightLbs(items: ShopifyCartItem[]): number {
   return items.reduce((total, item) => {
     return total + gramsToLbs(item.grams) * item.quantity;
   }, 0);
+}
+
+export function cartContainsHazmat(items: ShopifyCartItem[]): boolean {
+  return items.some((item) => extractItemHazmat(item));
 }
 
 function parseNumericProperty(value: string | undefined): number | null {
@@ -75,6 +81,12 @@ function extractItemDimensions(item: ShopifyCartItem): ItemDimensions {
     height: 0,
     hasValidDimensions: false,
   };
+}
+
+function extractItemHazmat(item: ShopifyCartItem): boolean {
+  const props = item.properties || {};
+  const hazmatValue = props["_is_hazmat"];
+  return hazmatValue === "true" || hazmatValue === "1";
 }
 
 function getEffectiveWeightCapacity(box: BoxConfig): number {
@@ -166,12 +178,14 @@ export function packItems(
     const floorArea = dimensions.hasValidDimensions
       ? dimensions.length * dimensions.width
       : 0;
+    const isHazmat = extractItemHazmat(item);
 
     for (let i = 0; i < item.quantity; i++) {
       packableItems.push({
         weightLbs: weightPerUnit,
         dimensions,
         floorArea,
+        isHazmat,
       });
     }
   }
@@ -186,11 +200,24 @@ export function packItems(
 
   const packedBoxes: PackedBox[] = [];
 
+  // Separate boxes by hazmat status for efficient lookup
+  const hazmatBoxes = boxesByAreaAsc.filter((box) => box.hazmat);
+  const nonHazmatBoxes = boxesByAreaAsc.filter((box) => !box.hazmat);
+  const largestHazmatBox = hazmatBoxes[hazmatBoxes.length - 1];
+  const largestNonHazmatBox = nonHazmatBoxes[nonHazmatBoxes.length - 1];
+
   for (const item of packableItems) {
     let placed = false;
 
-    // Try to fit in existing boxes
+    // Get the appropriate boxes for this item's hazmat status
+    const eligibleBoxes = item.isHazmat ? hazmatBoxes : nonHazmatBoxes;
+    const fallbackBox = item.isHazmat ? largestHazmatBox : largestNonHazmatBox;
+
+    // Try to fit in existing boxes with matching hazmat status
     for (const packedBox of packedBoxes) {
+      if (packedBox.isHazmat !== item.isHazmat) {
+        continue; // Skip boxes that don't match hazmat status
+      }
       if (itemFitsInPackedBox(item, packedBox)) {
         packedBox.itemWeightLbs += item.weightLbs;
         packedBox.totalWeightLbs += item.weightLbs;
@@ -202,16 +229,22 @@ export function packItems(
 
     // Need a new box
     if (!placed) {
-      const suitableBox = boxesByAreaAsc.find((box) =>
+      const suitableBox = eligibleBoxes.find((box) =>
         itemFitsInBox(item, box),
       );
 
-      const boxToUse = suitableBox || largestBox;
+      const boxToUse = suitableBox || fallbackBox;
+      if (!boxToUse) {
+        throw new Error(
+          `No ${item.isHazmat ? "hazmat" : "non-hazmat"} box configurations available`,
+        );
+      }
       packedBoxes.push({
         box: boxToUse,
         itemWeightLbs: item.weightLbs,
         totalWeightLbs: boxToUse.emptyWeightLbs + item.weightLbs,
         usedFloorArea: item.floorArea,
+        isHazmat: item.isHazmat,
       });
     }
   }

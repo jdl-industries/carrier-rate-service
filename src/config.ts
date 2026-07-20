@@ -68,20 +68,40 @@ export const GRAMS_PER_LB = 453.592;
 
 export const BOX_CONFIGS: BoxConfig[] = [
   {
-    name: "2-gallon",
+    name: "2-Gal Kit Box (Hazmat)",
     length: 9,
     width: 15,
     height: 9,
     maxWeightLbs: 30,
     emptyWeightLbs: 2,
+    hazmat: true,
   },
   {
-    name: "4-gallon",
+    name: "3-Qt Kit Box (Hazmat)",
+    length: 16,
+    width: 12,
+    height: 10,
+    maxWeightLbs: 14,
+    emptyWeightLbs: 2.25,
+    hazmat: true,
+  },
+  {
+    name: "4-Gal Kit Box (Hazmat)",
     length: 15,
     width: 15,
     height: 9,
     maxWeightLbs: 55,
-    emptyWeightLbs: 3,
+    emptyWeightLbs: 2.5,
+    hazmat: true,
+  },
+  {
+    name: "2-Gal WF/WS Box (Non-hazmat)",
+    length: 18,
+    width: 9,
+    height: 11,
+    maxWeightLbs: 30,
+    emptyWeightLbs: 2.25,
+    hazmat: false,
   },
 ];
 
