@@ -6,7 +6,6 @@ import type {
   FedExPackageLineItem,
   FedExAddress,
   ParsedFedExRate,
-  FedExSpecialServicesRequested,
 } from "../types";
 import {
   FEDEX_TOKEN_EXPIRY_BUFFER_SECONDS,
@@ -23,7 +22,10 @@ interface CachedToken {
 }
 
 // Separate token caches for sandbox and production
-const tokenCaches: { sandbox: CachedToken | null; production: CachedToken | null } = {
+const tokenCaches: {
+  sandbox: CachedToken | null;
+  production: CachedToken | null;
+} = {
   sandbox: null,
   production: null,
 };
@@ -40,7 +42,8 @@ export function getFedExCredentials(env: Env): {
     return {
       clientId: env.FEDEX_SANDBOX_CLIENT_ID || env.FEDEX_CLIENT_ID,
       clientSecret: env.FEDEX_SANDBOX_CLIENT_SECRET || env.FEDEX_CLIENT_SECRET,
-      accountNumber: env.FEDEX_SANDBOX_ACCOUNT_NUMBER || env.FEDEX_ACCOUNT_NUMBER,
+      accountNumber:
+        env.FEDEX_SANDBOX_ACCOUNT_NUMBER || env.FEDEX_ACCOUNT_NUMBER,
       useSandbox: true,
     };
   }
@@ -93,75 +96,16 @@ export async function getFedExAccessToken(env: Env): Promise<string> {
   return data.access_token;
 }
 
-// Hazmat mode for rate requests:
-// - "ground": FedEx Ground (DOT 49 CFR) - uses HAZARDOUS_MATERIALS + hazardousMaterials object
-// - "air": FedEx Express/Air (IATA) - uses DANGEROUS_GOODS + dangerousGoodsDetail object
-export type HazmatMode = "ground" | "air";
-
-// Ground hazmat package special services structure (DOT/49 CFR)
-// Uses HAZARDOUS_MATERIALS special service with full commodity details
-function buildGroundHazmatPackageServices(): FedExSpecialServicesRequested {
-  return {
-    specialServiceTypes: ["HAZARDOUS_MATERIALS"],
-    hazardousMaterials: {
-      // UN 1263 - Paint and Paint Related Materials
-      materialId: "UN1263",
-      properShippingName: "PAINT",
-      hazardClass: "3",
-      packingGroup: "II",
-    },
-  };
-}
-
-// Air hazmat package special services structure (IATA)
-function buildAirHazmatPackageServices(): FedExSpecialServicesRequested {
-  return {
-    specialServiceTypes: ["DANGEROUS_GOODS"],
-    dangerousGoodsDetail: {
-      accessibility: "ACCESSIBLE",
-      regulationType: "IATA",
-    },
-  };
-}
-
 export function buildFedExRateRequest(
   shipperAddress: FedExAddress,
   recipientAddress: FedExAddress,
   packages: FedExPackageLineItem[],
   accountNumber: string,
-  hazmatMode: HazmatMode | null = null,
   shipDate: Date = new Date(),
-  carrierCodes?: string[],
 ): FedExRateRequest {
   const shipDateStamp = shipDate.toISOString().split("T")[0];
 
-  // Add hazmat handling based on mode:
-  // - "ground": FedEx Rate API doesn't support Ground hazmat - use base rates
-  // - "air": DANGEROUS_GOODS with IATA-compliant dangerousGoodsDetail object
-  let requestPackages: FedExPackageLineItem[];
-
-  if (hazmatMode === "ground") {
-    // FedEx Rate API doesn't support hazmat for Ground - just get base rates
-    // The handler will add the client's hazmat handling fee
-    const groundServices = buildGroundHazmatPackageServices();
-    if (groundServices) {
-      requestPackages = packages.map((pkg) => ({
-        ...pkg,
-        packageSpecialServices: groundServices,
-      }));
-    } else {
-      requestPackages = packages;
-    }
-  } else if (hazmatMode === "air") {
-    requestPackages = packages.map((pkg) => ({
-      ...pkg,
-      packageSpecialServices: buildAirHazmatPackageServices(),
-    }));
-  } else {
-    requestPackages = packages;
-  }
-
-  const request: FedExRateRequest = {
+  return {
     accountNumber: {
       value: accountNumber,
     },
@@ -172,7 +116,6 @@ export function buildFedExRateRequest(
     requestedShipment: {
       shipper: {
         address: {
-          streetLines: shipperAddress.streetLines,
           city: shipperAddress.city,
           stateOrProvinceCode: shipperAddress.stateOrProvinceCode,
           postalCode: shipperAddress.postalCode,
@@ -180,33 +123,32 @@ export function buildFedExRateRequest(
         },
       },
       recipient: {
-        address: recipientAddress,
-      },
-      shippingChargesPayment: {
-        paymentType: "SENDER",
-        payor: {
-          responsibleParty: {
-            accountNumber: {
-              value: accountNumber,
-            },
-          },
+        address: {
+          city: recipientAddress.city,
+          stateOrProvinceCode: recipientAddress.stateOrProvinceCode,
+          postalCode: recipientAddress.postalCode,
+          countryCode: recipientAddress.countryCode,
         },
       },
+      // shippingChargesPayment: {
+      //   paymentType: "SENDER",
+      //   payor: {
+      //     responsibleParty: {
+      //       accountNumber: {
+      //         value: accountNumber,
+      //       },
+      //     },
+      //   },
+      // },
       preferredCurrency: "USD",
       shipDateStamp,
       pickupType: "USE_SCHEDULED_PICKUP",
       packagingType: "YOUR_PACKAGING",
       rateRequestType: ["ACCOUNT"],
-      requestedPackageLineItems: requestPackages,
+      requestedPackageLineItems: packages,
     },
+    carrierCodes: ["FDXE", "FDXG", "FXSP"], // Express, Ground, Ground Economy
   };
-
-  // Add carrier codes if specified (e.g., FDXG for Ground-only)
-  if (carrierCodes && carrierCodes.length > 0) {
-    request.carrierCodes = carrierCodes;
-  }
-
-  return request;
 }
 
 export async function callFedExRateAPI(
@@ -262,12 +204,16 @@ export function parseFedExRateResponse(
   const allowedServices = new Set<string>(ALL_ALLOWED_SERVICES);
 
   // Log all services returned by FedEx for debugging
-  const returnedServices = response.output.rateReplyDetails.map(d => d.serviceType);
+  const returnedServices = response.output.rateReplyDetails.map(
+    (d) => d.serviceType,
+  );
   console.log("[FedEx] Services returned by API:", returnedServices.join(", "));
 
   for (const detail of response.output.rateReplyDetails) {
     if (!allowedServices.has(detail.serviceType)) {
-      console.log(`[FedEx] Filtering out service: ${detail.serviceType} (not in allowed list)`);
+      console.log(
+        `[FedEx] Filtering out service: ${detail.serviceType} (not in allowed list)`,
+      );
       continue;
     }
 
@@ -290,7 +236,9 @@ export function parseFedExRateResponse(
 
     const selectedRate = accountRate || listRate;
     if (!selectedRate) {
-      console.log(`[FedEx] Skipping ${detail.serviceType}: no ACCOUNT or LIST rate found`);
+      console.log(
+        `[FedEx] Skipping ${detail.serviceType}: no ACCOUNT or LIST rate found`,
+      );
       continue;
     }
 
@@ -308,7 +256,9 @@ export function parseFedExRateResponse(
     } else if (Array.isArray(fedExCharge) && fedExCharge[0]?.amount) {
       totalChargeCents = Math.round(fedExCharge[0].amount * 100);
     } else {
-      console.log(`[FedEx] Skipping ${detail.serviceType}: could not extract charge amount`);
+      console.log(
+        `[FedEx] Skipping ${detail.serviceType}: could not extract charge amount`,
+      );
       continue;
     }
 

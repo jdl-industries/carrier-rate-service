@@ -7,7 +7,7 @@ export interface FedExOAuthResponse {
 
 export interface FedExAddress {
   streetLines?: string[];
-  city: string;
+  city?: string;
   stateOrProvinceCode?: string;
   postalCode: string;
   countryCode: string;
@@ -28,13 +28,7 @@ export interface FedExDimensions {
 
 export interface FedExDangerousGoodsDetail {
   accessibility: "ACCESSIBLE" | "INACCESSIBLE";
-  regulationType: "DOT" | "IATA" | "DOT_IATA";
-  cargo?: boolean;
-  signatory?: {
-    contactName: string;
-    title: string;
-    place: string;
-  };
+  regulation: "DOT" | "IATA";
 }
 
 export interface FedExHazardousMaterialsQuantity {
@@ -106,7 +100,7 @@ export interface FedExRateRequest {
       | "CONTACT_FEDEX_TO_SCHEDULE"
       | "USE_SCHEDULED_PICKUP";
     packagingType: "YOUR_PACKAGING" | "FEDEX_BOX" | "FEDEX_ENVELOPE";
-    rateRequestType: ("LIST" | "ACCOUNT")[];
+    rateRequestType?: ("LIST" | "ACCOUNT")[];
     requestedPackageLineItems: FedExPackageLineItem[];
   };
 }

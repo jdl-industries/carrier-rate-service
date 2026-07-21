@@ -255,19 +255,33 @@ export function packItems(
 export function packedBoxesToFedExPackages(
   packedBoxes: PackedBox[],
 ): FedExPackageLineItem[] {
-  return packedBoxes.map((packed) => ({
-    weight: {
-      units: "LB",
-      value: Math.round(packed.totalWeightLbs * 100) / 100,
-    },
-    dimensions: {
-      length: packed.box.length,
-      width: packed.box.width,
-      height: packed.box.height,
-      units: "IN",
-    },
-    groupPackageCount: 1,
-  }));
+  return packedBoxes.map((packed) => {
+    const pkg: FedExPackageLineItem = {
+      weight: {
+        units: "LB",
+        value: Math.round(packed.totalWeightLbs * 100) / 100,
+      },
+      dimensions: {
+        length: packed.box.length,
+        width: packed.box.width,
+        height: packed.box.height,
+        units: "IN",
+      },
+      groupPackageCount: 1,
+    };
+
+    if (packed.isHazmat) {
+      pkg.packageSpecialServices = {
+        specialServiceTypes: ["DANGEROUS_GOODS"],
+        dangerousGoodsDetail: {
+          accessibility: "ACCESSIBLE",
+          regulation: "DOT",
+        },
+      };
+    }
+
+    return pkg;
+  });
 }
 
 export function getPackagesForCart(

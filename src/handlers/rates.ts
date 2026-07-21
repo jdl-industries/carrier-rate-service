@@ -22,7 +22,6 @@ import {
   callFedExRateAPI,
   parseFedExRateResponse,
   isGroundService,
-  type HazmatMode,
 } from "../services/fedex";
 import {
   calculateDeliveryDates,
@@ -462,109 +461,36 @@ export async function handleRateRequest(
       const handlingDays = getMaxHandlingDays(items, defaultHandlingDays);
       const shipDate = calculateShipDate(handlingDays);
 
-      if (includeHazmat && !route.isInternational) {
-        // For domestic hazmat, make parallel requests:
-        // - Ground request with HAZARDOUS_MATERIALS + carrierCodes: FDXG
-        // - Air request with DANGEROUS_GOODS + IATA dangerousGoodsDetail
-        const groundRequest = buildFedExRateRequest(
-          shipperAddress,
-          recipientAddress,
-          packages,
-          credentials.accountNumber,
-          "ground", // DOT hazmat for Ground services
-          shipDate,
-          ["FDXG"], // Explicitly request FedEx Ground carrier
-        );
+      const rateRequest = buildFedExRateRequest(
+        shipperAddress,
+        recipientAddress,
+        packages,
+        credentials.accountNumber,
+        shipDate,
+      );
 
-        const airRequest = buildFedExRateRequest(
-          shipperAddress,
-          recipientAddress,
-          packages,
-          credentials.accountNumber,
-          "air", // IATA hazmat for Air/Express services
-          shipDate,
-          ["FDXE"], // Explicitly request FedEx Express carrier
-        );
+      logger.debugPayload("FedEx rate request", rateRequest);
 
-        logger.debugPayload("FedEx rate request (Ground, HAZARDOUS_MATERIALS)", groundRequest);
-        logger.debugPayload("FedEx rate request (Air, DANGEROUS_GOODS)", airRequest);
+      const fedExResponse = await callFedExRateAPI(
+        rateRequest,
+        accessToken,
+        useSandbox,
+      );
 
-        const [groundResponse, airResponse] = await Promise.all([
-          callFedExRateAPI(groundRequest, accessToken, useSandbox),
-          callFedExRateAPI(airRequest, accessToken, useSandbox),
-        ]);
+      logger.debugPayload("FedEx rate response", fedExResponse);
 
-        logger.debugPayload("FedEx rate response (Ground)", groundResponse);
-        logger.debugPayload("FedEx rate response (Air)", airResponse);
-
-        // Log errors but don't fail - we may still get rates from one request
-        if (groundResponse.errors?.length) {
-          logger.warn("FedEx Ground request returned errors", { errors: groundResponse.errors });
-        }
-        if (airResponse.errors?.length) {
-          logger.warn("FedEx Air request returned errors", { errors: airResponse.errors });
-        }
-
-        // Parse rates from both responses
-        const groundRates = parseFedExRateResponse(groundResponse, false);
-        const airRates = parseFedExRateResponse(airResponse, false);
-
-        // Combine rates: use Ground rates for ground services, Air rates for air services
-        // This ensures Ground gets base rate (we add hazmat fee later) and Air gets DG-inclusive rate
-        const seenServices = new Set<string>();
-        parsedRates = [];
-
-        // First, add ground services from the ground response
-        for (const rate of groundRates) {
-          if (isGroundService(rate.serviceType)) {
-            seenServices.add(rate.serviceType);
-            parsedRates.push(rate);
-          }
-        }
-
-        // Then, add air services from the air response (these include FedEx DG surcharge)
-        for (const rate of airRates) {
-          if (!seenServices.has(rate.serviceType)) {
-            seenServices.add(rate.serviceType);
-            parsedRates.push(rate);
-          }
-        }
-      } else {
-        // Non-hazmat or international: single request
-        // International hazmat uses IATA/air mode
-        const hazmatMode: HazmatMode | null = includeHazmat ? "air" : null;
-        const rateRequest = buildFedExRateRequest(
-          shipperAddress,
-          recipientAddress,
-          packages,
-          credentials.accountNumber,
-          hazmatMode,
-          shipDate,
-        );
-
-        logger.debugPayload("FedEx rate request", rateRequest);
-
-        const fedExResponse = await callFedExRateAPI(
-          rateRequest,
-          accessToken,
-          useSandbox,
-        );
-
-        logger.debugPayload("FedEx rate response", fedExResponse);
-
-        if (fedExResponse.errors && fedExResponse.errors.length > 0) {
-          logger.error("FedEx API returned errors", {
-            errors: fedExResponse.errors,
-            destinationZip: request.rate.destination.postal_code,
-          });
-          return c.json({ error: "FedEx API error" }, 500);
-        }
-
-        parsedRates = parseFedExRateResponse(
-          fedExResponse,
-          route.isInternational,
-        );
+      if (fedExResponse.errors && fedExResponse.errors.length > 0) {
+        logger.error("FedEx API returned errors", {
+          errors: fedExResponse.errors,
+          destinationZip: request.rate.destination.postal_code,
+        });
+        return c.json({ error: "FedEx API error" }, 500);
       }
+
+      parsedRates = parseFedExRateResponse(
+        fedExResponse,
+        route.isInternational,
+      );
     }
 
     if (parsedRates.length === 0) {
