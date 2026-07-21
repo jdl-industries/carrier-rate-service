@@ -229,9 +229,7 @@ export function packItems(
 
     // Need a new box
     if (!placed) {
-      const suitableBox = eligibleBoxes.find((box) =>
-        itemFitsInBox(item, box),
-      );
+      const suitableBox = eligibleBoxes.find((box) => itemFitsInBox(item, box));
 
       const boxToUse = suitableBox || fallbackBox;
       if (!boxToUse) {
@@ -271,13 +269,19 @@ export function packedBoxesToFedExPackages(
     };
 
     if (packed.isHazmat) {
+      console.log(
+        `[Packaging] Adding DANGEROUS_GOODS to package (box: ${packed.box.name})`,
+      );
       pkg.packageSpecialServices = {
         specialServiceTypes: ["DANGEROUS_GOODS"],
         dangerousGoodsDetail: {
           accessibility: "ACCESSIBLE",
-          regulation: "DOT",
+          //regulation: "DOT",
+          //options: ["HAZARDOUS_MATERIALS"],
         },
       };
+    } else {
+      console.log(`[Packaging] Non-hazmat package (box: ${packed.box.name})`);
     }
 
     return pkg;

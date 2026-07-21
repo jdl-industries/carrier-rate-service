@@ -130,24 +130,23 @@ export function buildFedExRateRequest(
           countryCode: recipientAddress.countryCode,
         },
       },
-      // shippingChargesPayment: {
-      //   paymentType: "SENDER",
-      //   payor: {
-      //     responsibleParty: {
-      //       accountNumber: {
-      //         value: accountNumber,
-      //       },
-      //     },
-      //   },
-      // },
+      shippingChargesPayment: {
+        paymentType: "SENDER",
+        payor: {
+          responsibleParty: {
+            accountNumber: {
+              value: accountNumber,
+            },
+          },
+        },
+      },
       preferredCurrency: "USD",
       shipDateStamp,
       pickupType: "USE_SCHEDULED_PICKUP",
       packagingType: "YOUR_PACKAGING",
-      rateRequestType: ["ACCOUNT"],
+      rateRequestType: ["ACCOUNT", "LIST"],
       requestedPackageLineItems: packages,
     },
-    carrierCodes: ["FDXE", "FDXG", "FXSP"], // Express, Ground, Ground Economy
   };
 }
 

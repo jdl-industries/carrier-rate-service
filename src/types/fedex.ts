@@ -28,7 +28,8 @@ export interface FedExDimensions {
 
 export interface FedExDangerousGoodsDetail {
   accessibility: "ACCESSIBLE" | "INACCESSIBLE";
-  regulation: "DOT" | "IATA";
+  regulation?: "DOT" | "IATA";
+  options?: string[];
 }
 
 export interface FedExHazardousMaterialsQuantity {
