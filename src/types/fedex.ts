@@ -37,9 +37,30 @@ export interface FedExDangerousGoodsDetail {
   };
 }
 
+export interface FedExHazardousMaterialsQuantity {
+  amount: number;
+  units: string; // "GA" for gallons, "L" for liters, etc.
+}
+
+export interface FedExHazardousMaterialsInnerReceptacle {
+  quantity: FedExHazardousMaterialsQuantity;
+}
+
+// FedEx Ground hazardous materials (DOT 49 CFR)
+export interface FedExHazardousMaterials {
+  materialId: string; // e.g., "UN 1263"
+  properShippingName: string; // e.g., "PAINT"
+  hazardClass: string; // e.g., "3"
+  packingGroup?: string; // e.g., "II" or "III"
+  quantity?: FedExHazardousMaterialsQuantity;
+  innerReceptacles?: FedExHazardousMaterialsInnerReceptacle[];
+  packagingSpecificationType?: string;
+}
+
 export interface FedExSpecialServicesRequested {
   specialServiceTypes: string[];
   dangerousGoodsDetail?: FedExDangerousGoodsDetail;
+  hazardousMaterials?: FedExHazardousMaterials;
 }
 
 export interface FedExPackageLineItem {
@@ -53,6 +74,8 @@ export interface FedExRateRequest {
   accountNumber: {
     value: string;
   };
+  // Carrier codes: FDXE (Express), FDXG (Ground), FXSP (Ground Economy)
+  carrierCodes?: string[];
   rateRequestControlParameters?: {
     returnTransitTimes: boolean;
     servicesNeededOnRateFailure: boolean;
