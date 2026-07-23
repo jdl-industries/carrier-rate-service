@@ -8,7 +8,12 @@ import type {
   ParsedFedExRate,
   FedExPackageLineItem,
 } from "../types";
-import { LOCAL_DELIVERY_ZIPS, BOX_CONFIGS, HAZMAT_FEES_CENTS } from "../config";
+import {
+  LOCAL_DELIVERY_ZIPS,
+  BOX_CONFIGS,
+  HAZMAT_FEES_CENTS,
+  DEFAULT_FEDEX_RATE_MARKUP_PERCENT,
+} from "../config";
 import { determineRoute, hasShippableItems } from "../services/routing";
 import { getPackagesForCart } from "../services/packaging";
 import {
@@ -51,6 +56,16 @@ function getDefaultHandlingDays(env: Env): number {
     }
   }
   return DEFAULT_HANDLING_DAYS;
+}
+
+function getFedExRateMarkupPercent(env: Env): number {
+  if (env.FEDEX_RATE_MARKUP_PERCENT) {
+    const parsed = parseFloat(env.FEDEX_RATE_MARKUP_PERCENT);
+    if (!isNaN(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_FEDEX_RATE_MARKUP_PERCENT;
 }
 
 function buildLocalDeliveryRate(): ShopifyRate {
@@ -156,6 +171,7 @@ function fedExRatesToShopifyRates(
   request: ShopifyRateRequest,
   defaultHandlingDays: number,
   includeHazmat: boolean,
+  markupPercent: number,
 ): ShopifyRate[] {
   const rates: ShopifyRate[] = [];
   const items = request.rate.items;
@@ -168,7 +184,11 @@ function fedExRatesToShopifyRates(
         : HAZMAT_FEES_CENTS.air_per_order
       : 0;
 
-    const totalPriceCents = fedExRate.totalChargeCents + handlingFee;
+    // Apply markup to FedEx rate before adding handling fees
+    const markedUpFedExRate = Math.round(
+      fedExRate.totalChargeCents * (1 + markupPercent / 100),
+    );
+    const totalPriceCents = markedUpFedExRate + handlingFee;
 
     // Use FedEx-provided delivery date if available, otherwise calculate from transit days
     let deliveryDateISO: string;
@@ -570,11 +590,13 @@ export async function handleRateRequest(
     }
 
     const defaultHandlingDays = getDefaultHandlingDays(c.env);
+    const markupPercent = getFedExRateMarkupPercent(c.env);
     const shopifyRates = fedExRatesToShopifyRates(
       parsedRates,
       request,
       defaultHandlingDays,
       includeHazmat,
+      markupPercent,
     );
 
     // Prepend local delivery option if in local delivery zone

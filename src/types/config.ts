@@ -25,6 +25,8 @@ export interface Env {
   // Set to 'true' to use FedEx sandbox/test environment and credentials
   FEDEX_SANDBOX?: string;
   DEFAULT_HANDLING_DAYS?: string;
+  // Percentage markup to apply to FedEx rates (e.g., "10" for 10%)
+  FEDEX_RATE_MARKUP_PERCENT?: string;
   LOG?: string; // Set to 'full' to enable verbose request/response logging
   // Cloudflare KV namespace for variant metafield data (fallback for draft orders)
   VARIANT_DATA: KVNamespace;

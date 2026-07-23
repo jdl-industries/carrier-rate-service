@@ -110,6 +110,10 @@ export const HAZMAT_FEES_CENTS: HazmatFees = {
   air_per_order: 12500,
 };
 
+// Default markup percentage applied to all FedEx rates
+// Can be overridden via FEDEX_RATE_MARKUP_PERCENT environment variable
+export const DEFAULT_FEDEX_RATE_MARKUP_PERCENT = 10;
+
 // =============================================================================
 // Local Delivery Zip Codes
 // =============================================================================
