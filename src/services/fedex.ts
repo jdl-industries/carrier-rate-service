@@ -22,7 +22,10 @@ interface CachedToken {
 }
 
 // Separate token caches for sandbox and production
-const tokenCaches: { sandbox: CachedToken | null; production: CachedToken | null } = {
+const tokenCaches: {
+  sandbox: CachedToken | null;
+  production: CachedToken | null;
+} = {
   sandbox: null,
   production: null,
 };
@@ -39,7 +42,8 @@ export function getFedExCredentials(env: Env): {
     return {
       clientId: env.FEDEX_SANDBOX_CLIENT_ID || env.FEDEX_CLIENT_ID,
       clientSecret: env.FEDEX_SANDBOX_CLIENT_SECRET || env.FEDEX_CLIENT_SECRET,
-      accountNumber: env.FEDEX_SANDBOX_ACCOUNT_NUMBER || env.FEDEX_ACCOUNT_NUMBER,
+      accountNumber:
+        env.FEDEX_SANDBOX_ACCOUNT_NUMBER || env.FEDEX_ACCOUNT_NUMBER,
       useSandbox: true,
     };
   }
@@ -92,30 +96,52 @@ export async function getFedExAccessToken(env: Env): Promise<string> {
   return data.access_token;
 }
 
+export type HazmatMode = "none" | "ground" | "air";
+
+function applyHazmatToPackages(
+  packages: FedExPackageLineItem[],
+  mode: HazmatMode,
+): FedExPackageLineItem[] {
+  if (mode === "none") {
+    return packages;
+  }
+
+  return packages.map((pkg) => {
+    if (mode === "ground") {
+      // FedEx Ground hazmat uses options array (no specialServiceTypes)
+      return {
+        ...pkg,
+        packageSpecialServices: {
+          dangerousGoodsDetail: {
+            options: ["HAZARDOUS_MATERIALS"],
+          },
+        },
+      };
+    } else {
+      // FedEx Air/Express hazmat uses DANGEROUS_GOODS with IATA regulation
+      return {
+        ...pkg,
+        packageSpecialServices: {
+          specialServiceTypes: ["DANGEROUS_GOODS"],
+          dangerousGoodsDetail: {
+            accessibility: "ACCESSIBLE",
+          },
+        },
+      };
+    }
+  });
+}
+
 export function buildFedExRateRequest(
   shipperAddress: FedExAddress,
   recipientAddress: FedExAddress,
   packages: FedExPackageLineItem[],
   accountNumber: string,
-  includeHazmat: boolean = false,
   shipDate: Date = new Date(),
+  hazmatMode: HazmatMode = "none",
 ): FedExRateRequest {
   const shipDateStamp = shipDate.toISOString().split("T")[0];
-
-  // Add dangerous goods handling if any items are hazmat
-  // Note: For rate quotes, we just flag the service type - detailed DG info is for shipping labels
-  const requestPackages: FedExPackageLineItem[] = includeHazmat
-    ? packages.map((pkg) => ({
-        ...pkg,
-        packageSpecialServices: {
-          specialServiceTypes: ["DANGEROUS_GOODS"],
-          dangerousGoodsDetail: {
-            accessibility: "INACCESSIBLE",
-            regulationType: "IATA",
-          },
-        },
-      }))
-    : packages;
+  const requestPackages = applyHazmatToPackages(packages, hazmatMode);
 
   return {
     accountNumber: {
@@ -128,7 +154,6 @@ export function buildFedExRateRequest(
     requestedShipment: {
       shipper: {
         address: {
-          streetLines: shipperAddress.streetLines,
           city: shipperAddress.city,
           stateOrProvinceCode: shipperAddress.stateOrProvinceCode,
           postalCode: shipperAddress.postalCode,
@@ -136,7 +161,12 @@ export function buildFedExRateRequest(
         },
       },
       recipient: {
-        address: recipientAddress,
+        address: {
+          city: recipientAddress.city,
+          stateOrProvinceCode: recipientAddress.stateOrProvinceCode,
+          postalCode: recipientAddress.postalCode,
+          countryCode: recipientAddress.countryCode,
+        },
       },
       shippingChargesPayment: {
         paymentType: "SENDER",
@@ -204,13 +234,23 @@ export function parseFedExRateResponse(
   const rates: ParsedFedExRate[] = [];
 
   if (!response.output?.rateReplyDetails) {
+    console.log("[FedEx] No rateReplyDetails in response");
     return rates;
   }
 
   const allowedServices = new Set<string>(ALL_ALLOWED_SERVICES);
 
+  // Log all services returned by FedEx for debugging
+  const returnedServices = response.output.rateReplyDetails.map(
+    (d) => d.serviceType,
+  );
+  console.log("[FedEx] Services returned by API:", returnedServices.join(", "));
+
   for (const detail of response.output.rateReplyDetails) {
     if (!allowedServices.has(detail.serviceType)) {
+      console.log(
+        `[FedEx] Filtering out service: ${detail.serviceType} (not in allowed list)`,
+      );
       continue;
     }
 
@@ -232,7 +272,12 @@ export function parseFedExRateResponse(
     );
 
     const selectedRate = accountRate || listRate;
-    if (!selectedRate) continue;
+    if (!selectedRate) {
+      console.log(
+        `[FedEx] Skipping ${detail.serviceType}: no ACCOUNT or LIST rate found`,
+      );
+      continue;
+    }
 
     // FedEx returns totalNetCharge as either a number or array of {currency, amount}
     let totalChargeCents: number;
@@ -248,6 +293,9 @@ export function parseFedExRateResponse(
     } else if (Array.isArray(fedExCharge) && fedExCharge[0]?.amount) {
       totalChargeCents = Math.round(fedExCharge[0].amount * 100);
     } else {
+      console.log(
+        `[FedEx] Skipping ${detail.serviceType}: could not extract charge amount`,
+      );
       continue;
     }
 

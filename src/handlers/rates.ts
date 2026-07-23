@@ -8,11 +8,7 @@ import type {
   ParsedFedExRate,
   FedExPackageLineItem,
 } from "../types";
-import {
-  LOCAL_DELIVERY_ZIPS,
-  BOX_CONFIGS,
-  HAZMAT_FEES_CENTS,
-} from "../config";
+import { LOCAL_DELIVERY_ZIPS, BOX_CONFIGS, HAZMAT_FEES_CENTS } from "../config";
 import { determineRoute, hasShippableItems } from "../services/routing";
 import { getPackagesForCart } from "../services/packaging";
 import {
@@ -22,6 +18,7 @@ import {
   callFedExRateAPI,
   parseFedExRateResponse,
   isGroundService,
+  type HazmatMode,
 } from "../services/fedex";
 import {
   calculateDeliveryDates,
@@ -122,16 +119,29 @@ function formatDeliveryEstimate(
     const minutes = parseInt(minuteStr, 10);
 
     // Format month name
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     const month = monthNames[monthIndex];
 
     // Format time as "8:30 AM"
     const ampm = hours >= 12 ? "PM" : "AM";
     const hour12 = hours % 12 || 12;
-    const timeStr = minutes > 0
-      ? `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
-      : `${hour12} ${ampm}`;
+    const timeStr =
+      minutes > 0
+        ? `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
+        : `${hour12} ${ampm}`;
 
     // Build description like "Delivery by Thu, Mar 26 by 8:30 AM"
     const dayStr = dayOfWeek ? `${dayOfWeek}, ` : "";
@@ -185,7 +195,9 @@ function fedExRatesToShopifyRates(
     }
 
     if (includeHazmat) {
-      descriptionParts.push(`Includes ${formatCents(handlingFee)} hazmat handling fee`);
+      descriptionParts.push(
+        `Includes ${formatCents(handlingFee)} hazmat handling fee`,
+      );
     }
 
     const rate: ShopifyRate = {
@@ -461,37 +473,88 @@ export async function handleRateRequest(
       const handlingDays = getMaxHandlingDays(items, defaultHandlingDays);
       const shipDate = calculateShipDate(handlingDays);
 
-      const rateRequest = buildFedExRateRequest(
-        shipperAddress,
-        recipientAddress,
-        packages,
-        credentials.accountNumber,
-        includeHazmat,
-        shipDate,
-      );
+      if (includeHazmat) {
+        // For hazmat shipments, make parallel requests for Ground and Air
+        // FedEx requires different payload structures for each
+        const groundRequest = buildFedExRateRequest(
+          shipperAddress,
+          recipientAddress,
+          packages,
+          credentials.accountNumber,
+          shipDate,
+          "ground",
+        );
 
-      logger.debugPayload("FedEx rate request", rateRequest);
+        const airRequest = buildFedExRateRequest(
+          shipperAddress,
+          recipientAddress,
+          packages,
+          credentials.accountNumber,
+          shipDate,
+          "air",
+        );
 
-      const fedExResponse = await callFedExRateAPI(
-        rateRequest,
-        accessToken,
-        useSandbox,
-      );
+        logger.debugPayload("FedEx Ground hazmat request", groundRequest);
+        logger.debugPayload("FedEx Air hazmat request", airRequest);
 
-      logger.debugPayload("FedEx rate response", fedExResponse);
+        // Make parallel requests
+        const [groundResponse, airResponse] = await Promise.all([
+          callFedExRateAPI(groundRequest, accessToken, useSandbox).catch((err) => {
+            logger.warn("FedEx Ground hazmat request failed", { error: err.message });
+            return null;
+          }),
+          callFedExRateAPI(airRequest, accessToken, useSandbox).catch((err) => {
+            logger.warn("FedEx Air hazmat request failed", { error: err.message });
+            return null;
+          }),
+        ]);
 
-      if (fedExResponse.errors && fedExResponse.errors.length > 0) {
-        logger.error("FedEx API returned errors", {
-          errors: fedExResponse.errors,
-          destinationZip: request.rate.destination.postal_code,
-        });
-        return c.json({ error: "FedEx API error" }, 500);
+        logger.debugPayload("FedEx Ground hazmat response", groundResponse);
+        logger.debugPayload("FedEx Air hazmat response", airResponse);
+
+        // Parse and merge results
+        const groundRates = groundResponse
+          ? parseFedExRateResponse(groundResponse, route.isInternational)
+          : [];
+        const airRates = airResponse
+          ? parseFedExRateResponse(airResponse, route.isInternational)
+          : [];
+
+        parsedRates = [...groundRates, ...airRates];
+      } else {
+        // Non-hazmat: single request
+        const rateRequest = buildFedExRateRequest(
+          shipperAddress,
+          recipientAddress,
+          packages,
+          credentials.accountNumber,
+          shipDate,
+          "none",
+        );
+
+        logger.debugPayload("FedEx rate request", rateRequest);
+
+        const fedExResponse = await callFedExRateAPI(
+          rateRequest,
+          accessToken,
+          useSandbox,
+        );
+
+        logger.debugPayload("FedEx rate response", fedExResponse);
+
+        if (fedExResponse.errors && fedExResponse.errors.length > 0) {
+          logger.error("FedEx API returned errors", {
+            errors: fedExResponse.errors,
+            destinationZip: request.rate.destination.postal_code,
+          });
+          return c.json({ error: "FedEx API error" }, 500);
+        }
+
+        parsedRates = parseFedExRateResponse(
+          fedExResponse,
+          route.isInternational,
+        );
       }
-
-      parsedRates = parseFedExRateResponse(
-        fedExResponse,
-        route.isInternational,
-      );
     }
 
     if (parsedRates.length === 0) {

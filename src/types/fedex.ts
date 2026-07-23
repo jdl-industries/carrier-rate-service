@@ -7,7 +7,7 @@ export interface FedExOAuthResponse {
 
 export interface FedExAddress {
   streetLines?: string[];
-  city: string;
+  city?: string;
   stateOrProvinceCode?: string;
   postalCode: string;
   countryCode: string;
@@ -27,19 +27,35 @@ export interface FedExDimensions {
 }
 
 export interface FedExDangerousGoodsDetail {
-  accessibility: "ACCESSIBLE" | "INACCESSIBLE";
-  regulationType: "DOT" | "IATA" | "DOT_IATA";
-  cargo?: boolean;
-  signatory?: {
-    contactName: string;
-    title: string;
-    place: string;
-  };
+  accessibility?: "ACCESSIBLE" | "INACCESSIBLE";
+  regulation?: "DOT" | "IATA";
+  options?: string[]; // Used for Ground hazmat: ["HAZARDOUS_MATERIALS"]
+}
+
+export interface FedExHazardousMaterialsQuantity {
+  amount: number;
+  units: string; // "GA" for gallons, "L" for liters, etc.
+}
+
+export interface FedExHazardousMaterialsInnerReceptacle {
+  quantity: FedExHazardousMaterialsQuantity;
+}
+
+// FedEx Ground hazardous materials (DOT 49 CFR)
+export interface FedExHazardousMaterials {
+  materialId: string; // e.g., "UN 1263"
+  properShippingName: string; // e.g., "PAINT"
+  hazardClass: string; // e.g., "3"
+  packingGroup?: string; // e.g., "II" or "III"
+  quantity?: FedExHazardousMaterialsQuantity;
+  innerReceptacles?: FedExHazardousMaterialsInnerReceptacle[];
+  packagingSpecificationType?: string;
 }
 
 export interface FedExSpecialServicesRequested {
-  specialServiceTypes: string[];
+  specialServiceTypes?: string[]; // Used for Air hazmat: ["DANGEROUS_GOODS"]
   dangerousGoodsDetail?: FedExDangerousGoodsDetail;
+  hazardousMaterials?: FedExHazardousMaterials;
 }
 
 export interface FedExPackageLineItem {
@@ -53,6 +69,8 @@ export interface FedExRateRequest {
   accountNumber: {
     value: string;
   };
+  // Carrier codes: FDXE (Express), FDXG (Ground), FXSP (Ground Economy)
+  carrierCodes?: string[];
   rateRequestControlParameters?: {
     returnTransitTimes: boolean;
     servicesNeededOnRateFailure: boolean;
@@ -83,7 +101,7 @@ export interface FedExRateRequest {
       | "CONTACT_FEDEX_TO_SCHEDULE"
       | "USE_SCHEDULED_PICKUP";
     packagingType: "YOUR_PACKAGING" | "FEDEX_BOX" | "FEDEX_ENVELOPE";
-    rateRequestType: ("LIST" | "ACCOUNT")[];
+    rateRequestType?: ("LIST" | "ACCOUNT")[];
     requestedPackageLineItems: FedExPackageLineItem[];
   };
 }

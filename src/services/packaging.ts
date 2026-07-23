@@ -5,10 +5,10 @@ import type {
 } from "../types";
 import { GRAMS_PER_LB, BOX_CONFIGS } from "../config";
 
-// Safety factor for weight capacity
-const WEIGHT_FILL_PERCENTAGE = 0.9;
-// Safety factor for floor area (accounts for imperfect packing)
-const AREA_FILL_PERCENTAGE = 0.85;
+// Fill percentage for weight capacity (1.0 = use full capacity)
+const WEIGHT_FILL_PERCENTAGE = 1.0;
+// Fill percentage for floor area (1.0 = use full area)
+const AREA_FILL_PERCENTAGE = 1.0;
 
 export interface PackedBox {
   box: BoxConfig;
@@ -229,9 +229,7 @@ export function packItems(
 
     // Need a new box
     if (!placed) {
-      const suitableBox = eligibleBoxes.find((box) =>
-        itemFitsInBox(item, box),
-      );
+      const suitableBox = eligibleBoxes.find((box) => itemFitsInBox(item, box));
 
       const boxToUse = suitableBox || fallbackBox;
       if (!boxToUse) {
@@ -255,19 +253,23 @@ export function packItems(
 export function packedBoxesToFedExPackages(
   packedBoxes: PackedBox[],
 ): FedExPackageLineItem[] {
-  return packedBoxes.map((packed) => ({
-    weight: {
-      units: "LB",
-      value: Math.round(packed.totalWeightLbs * 100) / 100,
-    },
-    dimensions: {
-      length: packed.box.length,
-      width: packed.box.width,
-      height: packed.box.height,
-      units: "IN",
-    },
-    groupPackageCount: 1,
-  }));
+  return packedBoxes.map((packed) => {
+    const pkg: FedExPackageLineItem = {
+      weight: {
+        units: "LB",
+        value: Math.round(packed.totalWeightLbs * 100) / 100,
+      },
+      dimensions: {
+        length: packed.box.length,
+        width: packed.box.width,
+        height: packed.box.height,
+        units: "IN",
+      },
+      groupPackageCount: 1,
+    };
+
+    return pkg;
+  });
 }
 
 export function getPackagesForCart(

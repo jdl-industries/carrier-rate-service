@@ -522,9 +522,11 @@ describe("hazmat-aware packing", () => {
   });
 
   it("uses larger hazmat box when weight exceeds small hazmat box", () => {
+    // hazmat-small has maxWeightLbs: 20, emptyWeightLbs: 1.5
+    // So effective capacity is 18.5 lbs - use 19 lbs to exceed it
     const items = [
       createCartItem({
-        grams: Math.round(18 * GRAMS_PER_LB),
+        grams: Math.round(19 * GRAMS_PER_LB),
         quantity: 1,
         properties: { _is_hazmat: "true" },
       }),
