@@ -27,9 +27,9 @@ export interface FedExDimensions {
 }
 
 export interface FedExDangerousGoodsDetail {
-  accessibility: "ACCESSIBLE" | "INACCESSIBLE";
+  accessibility?: "ACCESSIBLE" | "INACCESSIBLE";
   regulation?: "DOT" | "IATA";
-  options?: string[];
+  options?: string[]; // Used for Ground hazmat: ["HAZARDOUS_MATERIALS"]
 }
 
 export interface FedExHazardousMaterialsQuantity {
@@ -53,7 +53,7 @@ export interface FedExHazardousMaterials {
 }
 
 export interface FedExSpecialServicesRequested {
-  specialServiceTypes: string[];
+  specialServiceTypes?: string[]; // Used for Air hazmat: ["DANGEROUS_GOODS"]
   dangerousGoodsDetail?: FedExDangerousGoodsDetail;
   hazardousMaterials?: FedExHazardousMaterials;
 }

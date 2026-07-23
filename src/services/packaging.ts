@@ -268,22 +268,6 @@ export function packedBoxesToFedExPackages(
       groupPackageCount: 1,
     };
 
-    if (packed.isHazmat) {
-      console.log(
-        `[Packaging] Adding DANGEROUS_GOODS to package (box: ${packed.box.name})`,
-      );
-      pkg.packageSpecialServices = {
-        specialServiceTypes: ["DANGEROUS_GOODS"],
-        dangerousGoodsDetail: {
-          accessibility: "ACCESSIBLE",
-          //regulation: "DOT",
-          //options: ["HAZARDOUS_MATERIALS"],
-        },
-      };
-    } else {
-      console.log(`[Packaging] Non-hazmat package (box: ${packed.box.name})`);
-    }
-
     return pkg;
   });
 }

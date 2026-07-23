@@ -96,14 +96,53 @@ export async function getFedExAccessToken(env: Env): Promise<string> {
   return data.access_token;
 }
 
+export type HazmatMode = "none" | "ground" | "air";
+
+function applyHazmatToPackages(
+  packages: FedExPackageLineItem[],
+  mode: HazmatMode,
+): FedExPackageLineItem[] {
+  if (mode === "none") {
+    return packages;
+  }
+
+  return packages.map((pkg) => {
+    if (mode === "ground") {
+      // FedEx Ground hazmat uses options array (no specialServiceTypes)
+      return {
+        ...pkg,
+        packageSpecialServices: {
+          dangerousGoodsDetail: {
+            options: ["HAZARDOUS_MATERIALS"],
+          },
+        },
+      };
+    } else {
+      // FedEx Air/Express hazmat uses DANGEROUS_GOODS with IATA regulation
+      return {
+        ...pkg,
+        packageSpecialServices: {
+          specialServiceTypes: ["DANGEROUS_GOODS"],
+          dangerousGoodsDetail: {
+            accessibility: "ACCESSIBLE",
+            //: "IATA",
+          },
+        },
+      };
+    }
+  });
+}
+
 export function buildFedExRateRequest(
   shipperAddress: FedExAddress,
   recipientAddress: FedExAddress,
   packages: FedExPackageLineItem[],
   accountNumber: string,
   shipDate: Date = new Date(),
+  hazmatMode: HazmatMode = "none",
 ): FedExRateRequest {
   const shipDateStamp = shipDate.toISOString().split("T")[0];
+  const requestPackages = applyHazmatToPackages(packages, hazmatMode);
 
   return {
     accountNumber: {
@@ -145,7 +184,7 @@ export function buildFedExRateRequest(
       pickupType: "USE_SCHEDULED_PICKUP",
       packagingType: "YOUR_PACKAGING",
       rateRequestType: ["ACCOUNT", "LIST"],
-      requestedPackageLineItems: packages,
+      requestedPackageLineItems: requestPackages,
     },
   };
 }
