@@ -182,7 +182,7 @@ export function buildFedExRateRequest(
       shipDateStamp,
       pickupType: "USE_SCHEDULED_PICKUP",
       packagingType: "YOUR_PACKAGING",
-      rateRequestType: ["ACCOUNT", "LIST"],
+      rateRequestType: ["ACCOUNT"],
       requestedPackageLineItems: requestPackages,
     },
   };
