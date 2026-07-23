@@ -125,7 +125,6 @@ function applyHazmatToPackages(
           specialServiceTypes: ["DANGEROUS_GOODS"],
           dangerousGoodsDetail: {
             accessibility: "ACCESSIBLE",
-            //: "IATA",
           },
         },
       };
